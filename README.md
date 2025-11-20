@@ -33,30 +33,30 @@ local ESPObjects = {}
 local AimTarget = nil
 local GUI = nil
 local FOVCircle = nil
-local QuickToggleBtn = nil
+local QuickToggleGui = nil
 
 -- Быстрая кнопка вкл/выкл
 local function createQuickToggle()
-    if QuickToggleBtn then QuickToggleBtn:Remove() end
+    if QuickToggleGui then QuickToggleGui:Remove() end
     
     local ScreenGui = Instance.new("ScreenGui")
     ScreenGui.Name = "QuickToggle"
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    ScreenGui.Parent = game.CoreGui
+    ScreenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
 
     local ToggleBtn = Instance.new("TextButton")
-    ToggleBtn.Size = UDim2.new(0, 40, 0, 40)
-    ToggleBtn.Position = UDim2.new(1, -50, 0, 10)
+    ToggleBtn.Size = UDim2.new(0, 60, 0, 30)
+    ToggleBtn.Position = UDim2.new(1, -70, 0, 10)
     ToggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     ToggleBtn.Text = "CHEAT"
     ToggleBtn.Font = Enum.Font.GothamBold
-    ToggleBtn.TextSize = 10
+    ToggleBtn.TextSize = 12
     ToggleBtn.ZIndex = 100
     ToggleBtn.Parent = ScreenGui
 
     local Corner = Instance.new("UICorner")
-    Corner.CornerRadius = UDim.new(0, 8)
+    Corner.CornerRadius = UDim.new(0, 6)
     Corner.Parent = ToggleBtn
 
     local Stroke = Instance.new("UIStroke")
@@ -74,7 +74,7 @@ local function createQuickToggle()
         end
     end)
 
-    QuickToggleBtn = ToggleBtn
+    QuickToggleGui = ScreenGui
     return ScreenGui
 end
 
@@ -85,7 +85,7 @@ local function createGUI()
     local ScreenGui = Instance.new("ScreenGui")
     ScreenGui.Name = "CS16Cheat"
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    ScreenGui.Parent = game.CoreGui
+    ScreenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
 
     -- Главное окно
     local MainFrame = Instance.new("Frame")
@@ -96,6 +96,7 @@ local function createGUI()
     MainFrame.Active = true
     MainFrame.Draggable = true
     MainFrame.Visible = false -- Начинаем скрытым
+    MainFrame.ZIndex = 99
     MainFrame.Parent = ScreenGui
 
     local Corner = Instance.new("UICorner")
@@ -116,6 +117,7 @@ local function createGUI()
     Title.Text = "CS 1.6 CHEAT"
     Title.Font = Enum.Font.GothamBold
     Title.TextSize = 14
+    Title.ZIndex = 100
     Title.Parent = MainFrame
 
     local TitleCorner = Instance.new("UICorner")
@@ -131,6 +133,7 @@ local function createGUI()
     CloseBtn.Text = "X"
     CloseBtn.Font = Enum.Font.GothamBold
     CloseBtn.TextSize = 12
+    CloseBtn.ZIndex = 101
     CloseBtn.Parent = Title
 
     local CloseCorner = Instance.new("UICorner")
@@ -142,6 +145,7 @@ local function createGUI()
     SettingsContainer.Size = UDim2.new(1, -20, 1, -40)
     SettingsContainer.Position = UDim2.new(0, 10, 0, 35)
     SettingsContainer.BackgroundTransparency = 1
+    SettingsContainer.ZIndex = 100
     SettingsContainer.Parent = MainFrame
 
     local UIListLayout = Instance.new("UIListLayout")
@@ -153,6 +157,7 @@ local function createGUI()
         local ToggleFrame = Instance.new("Frame")
         ToggleFrame.Size = UDim2.new(1, 0, 0, 25)
         ToggleFrame.BackgroundTransparency = 1
+        ToggleFrame.ZIndex = 100
         ToggleFrame.Parent = SettingsContainer
 
         local ToggleLabel = Instance.new("TextLabel")
@@ -163,6 +168,7 @@ local function createGUI()
         ToggleLabel.Font = Enum.Font.Gotham
         ToggleLabel.TextSize = 12
         ToggleLabel.TextXAlignment = Enum.TextXAlignment.Left
+        ToggleLabel.ZIndex = 100
         ToggleLabel.Parent = ToggleFrame
 
         local ToggleBtn = Instance.new("TextButton")
@@ -173,6 +179,7 @@ local function createGUI()
         ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
         ToggleBtn.Font = Enum.Font.GothamBold
         ToggleBtn.TextSize = 10
+        ToggleBtn.ZIndex = 100
         ToggleBtn.Parent = ToggleFrame
 
         local Corner = Instance.new("UICorner")
@@ -192,6 +199,7 @@ local function createGUI()
         local SliderFrame = Instance.new("Frame")
         SliderFrame.Size = UDim2.new(1, 0, 0, 40)
         SliderFrame.BackgroundTransparency = 1
+        SliderFrame.ZIndex = 100
         SliderFrame.Parent = SettingsContainer
 
         local SliderLabel = Instance.new("TextLabel")
@@ -202,12 +210,14 @@ local function createGUI()
         SliderLabel.Font = Enum.Font.Gotham
         SliderLabel.TextSize = 12
         SliderLabel.TextXAlignment = Enum.TextXAlignment.Left
+        SliderLabel.ZIndex = 100
         SliderLabel.Parent = SliderFrame
 
         local Slider = Instance.new("Frame")
         Slider.Size = UDim2.new(1, 0, 0, 6)
         Slider.Position = UDim2.new(0, 0, 0, 25)
         Slider.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+        Slider.ZIndex = 100
         Slider.Parent = SliderFrame
 
         local SliderCorner = Instance.new("UICorner")
@@ -217,6 +227,7 @@ local function createGUI()
         local Fill = Instance.new("Frame")
         Fill.Size = UDim2.new((SETTINGS[setting] - min) / (max - min), 0, 1, 0)
         Fill.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+        Fill.ZIndex = 101
         Fill.Parent = Slider
 
         local FillCorner = Instance.new("UICorner")
@@ -289,6 +300,7 @@ local function createGUI()
     local PartFrame = Instance.new("Frame")
     PartFrame.Size = UDim2.new(1, 0, 0, 30)
     PartFrame.BackgroundTransparency = 1
+    PartFrame.ZIndex = 100
     PartFrame.Parent = SettingsContainer
 
     local PartLabel = Instance.new("TextLabel")
@@ -299,6 +311,7 @@ local function createGUI()
     PartLabel.Font = Enum.Font.Gotham
     PartLabel.TextSize = 12
     PartLabel.TextXAlignment = Enum.TextXAlignment.Left
+    PartLabel.ZIndex = 100
     PartLabel.Parent = PartFrame
 
     local HeadBtn = Instance.new("TextButton")
@@ -309,6 +322,7 @@ local function createGUI()
     HeadBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     HeadBtn.Font = Enum.Font.Gotham
     HeadBtn.TextSize = 10
+    HeadBtn.ZIndex = 100
     HeadBtn.Parent = PartFrame
 
     local TorsoBtn = Instance.new("TextButton")
@@ -319,6 +333,7 @@ local function createGUI()
     TorsoBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     TorsoBtn.Font = Enum.Font.Gotham
     TorsoBtn.TextSize = 10
+    TorsoBtn.ZIndex = 100
     TorsoBtn.Parent = PartFrame
 
     local function updatePartButtons()
@@ -339,8 +354,11 @@ local function createGUI()
     -- Кнопка закрыть
     CloseBtn.MouseButton1Click:Connect(function()
         MainFrame.Visible = false
-        if QuickToggleBtn then
-            QuickToggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+        if QuickToggleGui then
+            local toggleBtn = QuickToggleGui:FindFirstChildOfClass("TextButton")
+            if toggleBtn then
+                toggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+            end
         end
     end)
 
@@ -524,7 +542,7 @@ local function createFOV()
     local ScreenGui = Instance.new("ScreenGui")
     ScreenGui.Name = "FOVCircle"
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    ScreenGui.Parent = game.CoreGui
+    ScreenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
 
     local Circle = Instance.new("Frame")
     Circle.Size = UDim2.new(0, SETTINGS.FOV * 2, 0, SETTINGS.FOV * 2)
@@ -561,6 +579,14 @@ end
 
 -- Основные циклы
 local function initialize()
+    -- Ждем загрузки игрока
+    if not game:IsLoaded() then
+        game.Loaded:Wait()
+    end
+    
+    local player = game.Players.LocalPlayer
+    player:WaitForChild("PlayerGui")
+    
     -- Создаем GUI и кнопки
     createGUI()
     createQuickToggle()
@@ -606,13 +632,13 @@ local function initialize()
             end
         end
     end)
+    
+    print("CS 1.6 CHEAT loaded!")
+    print("Controls:")
+    print("- Click CHEAT button (top-right) to open/close menu")
+    print("- RMB to aim")
+    print("- GUI to configure settings")
 end
 
 -- Запуск
-initialize()
-
-print("CS 1.6 CHEAT loaded!")
-print("Controls:")
-print("- Click CHEAT button to open/close menu")
-print("- RMB to aim")
-print("- GUI to configure settings")
+initialize() 
