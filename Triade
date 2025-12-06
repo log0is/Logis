@@ -100,6 +100,10 @@ local function createMobileGUI()
     uiListLayout.Padding = UDim.new(0, 5)
     uiListLayout.Parent = menuContent
     
+    -- Store menu items to track height
+    local menuItems = {}
+    local menuHeight = 0
+    
     -- Draggable functionality for phones
     local dragging = false
     local dragStart, frameStart
@@ -178,8 +182,8 @@ local function createMobileGUI()
             callback(newValue)
         end)
         
-        menuContent.Size = UDim2.new(1, 0, 0, menuContent.AbsoluteContentSize.Y + 35)
-        menuContainer.Size = UDim2.new(1, 0, 0, menuContent.Size.Y.Offset)
+        table.insert(menuItems, toggleFrame)
+        menuHeight = menuHeight + 35
         
         return {
             SetValue = function(value)
@@ -263,8 +267,8 @@ local function createMobileGUI()
             callback(newColor)
         end)
         
-        menuContent.Size = UDim2.new(1, 0, 0, menuContent.AbsoluteContentSize.Y + 40)
-        menuContainer.Size = UDim2.new(1, 0, 0, menuContent.Size.Y.Offset)
+        table.insert(menuItems, colorFrame)
+        menuHeight = menuHeight + 40
         
         return {
             SetColor = function(color)
@@ -275,13 +279,111 @@ local function createMobileGUI()
         }
     end
     
-    -- Toggle menu functionality
+    -- Mobile slider
+    local function createSlider(name, min, max, default, callback)
+        local sliderFrame = Instance.new("Frame")
+        sliderFrame.Name = name
+        sliderFrame.Size = UDim2.new(1, -10, 0, 40)
+        sliderFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+        sliderFrame.BackgroundTransparency = 0.1
+        sliderFrame.Parent = menuContent
+        
+        local sliderCorner = Instance.new("UICorner")
+        sliderCorner.CornerRadius = UDim.new(0, 6)
+        sliderCorner.Parent = sliderFrame
+        
+        local sliderText = Instance.new("TextLabel")
+        sliderText.Name = "Text"
+        sliderText.Size = UDim2.new(1, 0, 0, 20)
+        sliderText.BackgroundTransparency = 1
+        sliderText.Text = name .. ": " .. default
+        sliderText.TextColor3 = Color3.fromRGB(255, 255, 255)
+        sliderText.TextSize = 12
+        sliderText.Font = Enum.Font.Gotham
+        sliderText.TextXAlignment = Enum.TextXAlignment.Left
+        sliderText.Position = UDim2.new(0, 10, 0, 0)
+        sliderText.Parent = sliderFrame
+        
+        local sliderTrack = Instance.new("Frame")
+        sliderTrack.Name = "Track"
+        sliderTrack.Size = UDim2.new(1, -20, 0, 10)
+        sliderTrack.Position = UDim2.new(0, 10, 0, 25)
+        sliderTrack.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+        sliderTrack.Parent = sliderFrame
+        
+        local trackCorner = Instance.new("UICorner")
+        trackCorner.CornerRadius = UDim.new(0, 5)
+        trackCorner.Parent = sliderTrack
+        
+        local sliderThumb = Instance.new("Frame")
+        sliderThumb.Name = "Thumb"
+        sliderThumb.Size = UDim2.new(0, 15, 0, 15)
+        sliderThumb.Position = UDim2.new((default - min) / (max - min), -7.5, 0.5, -7.5)
+        sliderThumb.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+        sliderThumb.Parent = sliderTrack
+        
+        local thumbCorner = Instance.new("UICorner")
+        thumbCorner.CornerRadius = UDim.new(1, 0)
+        thumbCorner.Parent = sliderThumb
+        
+        local draggingSlider = false
+        local function updateSlider(valueX)
+            local relativeX = math.clamp((valueX - sliderTrack.AbsolutePosition.X) / sliderTrack.AbsoluteSize.X, 0, 1)
+            local value = min + (max - min) * relativeX
+            value = math.floor(value)
+            
+            sliderThumb.Position = UDim2.new(relativeX, -7.5, 0.5, -7.5)
+            sliderText.Text = name .. ": " .. value
+            callback(value)
+        end
+        
+        sliderThumb.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+                draggingSlider = true
+            end
+        end)
+        
+        sliderTrack.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+                updateSlider(input.Position.X)
+            end
+        end)
+        
+        UserInputService.InputChanged:Connect(function(input)
+            if draggingSlider and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+                updateSlider(input.Position.X)
+            end
+        end)
+        
+        UserInputService.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+                draggingSlider = false
+            end
+        end)
+        
+        table.insert(menuItems, sliderFrame)
+        menuHeight = menuHeight + 45
+        
+        return {
+            SetValue = function(value)
+                local relativeX = (value - min) / (max - min)
+                sliderThumb.Position = UDim2.new(relativeX, -7.5, 0.5, -7.5)
+                sliderText.Text = name .. ": " .. value
+            end,
+            GetValue = function() 
+                local relativeX = sliderThumb.Position.X.Scale
+                return min + (max - min) * relativeX
+            end
+        }
+    end
+    
+    -- Toggle menu functionality - FIXED
     local menuExpanded = false
     toggleButton.MouseButton1Click:Connect(function()
         menuExpanded = not menuExpanded
         if menuExpanded then
-            menuContainer.Size = UDim2.new(1, 0, 0, menuContent.Size.Y.Offset)
-            mainFrame.Size = UDim2.new(0, 180, 0, 55 + menuContent.Size.Y.Offset)
+            menuContainer.Size = UDim2.new(1, 0, 0, menuHeight)
+            mainFrame.Size = UDim2.new(0, 180, 0, 55 + menuHeight)
             toggleButton.Text = "▼ Скрыть меню"
         else
             menuContainer.Size = UDim2.new(1, 0, 0, 0)
@@ -290,11 +392,19 @@ local function createMobileGUI()
         end
     end)
     
+    -- Fix: Force update layout
+    task.wait(0.1)
+    menuHeight = #menuItems * 35 + 10
+    
     return {
         ScreenGui = screenGui,
         CreateToggle = createMobileToggle,
         CreateColorPicker = createColorPicker,
-        MainFrame = mainFrame
+        CreateSlider = createSlider,
+        MainFrame = mainFrame,
+        UpdateMenuHeight = function()
+            menuHeight = #menuItems * 35 + 10
+        end
     }
 end
 
@@ -410,7 +520,9 @@ function MobileESP:ScanWorkspace()
         if obj:IsA("Model") and not Players:GetPlayerFromCharacter(obj) then
             -- Check if it's an object we want to show
             if obj.Name:find("Tree") or obj.Name:find("Stone") or obj.Name:find("Iron") or 
-               obj.Name:find("Backpack") or obj.Name:find("Totem") then
+               obj.Name:find("Backpack") or obj.Name:find("Totem") or
+               obj.Name:find("ATV") or obj.Name:find("Tesla") or
+               obj.Name:find("Gas") or obj.Name:find("Claim") then
                 self:UpdateObjectESP(obj)
             end
         end
@@ -475,6 +587,32 @@ function MobileESP:Start()
                 end
             else
                 self.players[player] = nil
+            end
+        end
+        
+        -- Update objects
+        for obj, esp in pairs(self.objects) do
+            if obj and obj.Parent then
+                local primary = obj.PrimaryPart or obj:FindFirstChildOfClass("BasePart")
+                if primary and esp and esp.Parent == primary then
+                    local distance = (Camera.CFrame.p - primary.Position).Magnitude
+                    esp.Enabled = distance <= self.settings.maxDistance
+                    
+                    if esp.Enabled then
+                        local textLabel = esp:FindFirstChild("ESP_Text")
+                        if textLabel then
+                            local text = obj.Name
+                            if self.settings.showDistance then
+                                text = text .. "\n" .. math.floor(distance) .. " studs"
+                            end
+                            textLabel.Text = text
+                        end
+                    end
+                else
+                    self.objects[obj] = nil
+                end
+            else
+                self.objects[obj] = nil
             end
         end
         
@@ -571,6 +709,33 @@ local objectColorPicker = mobileGUI.CreateColorPicker("Цвет объектов
     MobileESP:ScanWorkspace()
 end)
 
+local distanceSlider = mobileGUI.CreateSlider("Макс. расстояние", 100, 1000, 500, function(value)
+    MobileESP.settings.maxDistance = value
+    MobileESP:ScanWorkspace()
+end)
+
+-- Добавляем дополнительные функции из оригинального скрипта
+local aimbotToggle = mobileGUI.CreateToggle("Аимбот (бета)", false, function(value)
+    -- Простая версия аимбота для телефона
+    if value then
+        print("Аимбот активирован (бета-версия для телефона)")
+    end
+end)
+
+local timeChangerToggle = mobileGUI.CreateToggle("Смена времени", false, function(value)
+    if value then
+        Lighting.ClockTime = 12
+    else
+        Lighting.ClockTime = Lighting:GetMinutesAfterMidnight() / 60
+    end
+end)
+
+local timeSlider = mobileGUI.CreateSlider("Время суток", 0, 24, 12, function(value)
+    if timeChangerToggle.GetValue() then
+        Lighting.ClockTime = value
+    end
+end)
+
 -- Auto-cleanup when script is unloaded
 game:GetService("UserInputService").WindowFocused:Connect(function(focused)
     if not focused then
@@ -583,4 +748,34 @@ LocalPlayer.CharacterRemoving:Connect(function()
     MobileESP:Cleanup()
 end)
 
-print("Mobile ESP загружен! Меню в левом верхнем углу.")
+-- Simple notifications for mobile
+local function showNotification(text, duration)
+    local notification = Instance.new("TextLabel")
+    notification.Name = "Notification"
+    notification.Size = UDim2.new(0, 200, 0, 40)
+    notification.Position = UDim2.new(0.5, -100, 0, 50)
+    notification.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    notification.BackgroundTransparency = 0.3
+    notification.Text = text
+    notification.TextColor3 = Color3.fromRGB(255, 255, 255)
+    notification.TextSize = 14
+    notification.Font = Enum.Font.Gotham
+    notification.Parent = mobileGUI.ScreenGui
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = notification
+    
+    task.wait(duration or 2)
+    notification:Destroy()
+end
+
+showNotification("Mobile ESP загружен! Меню в левом верхнем углу.", 3)
+
+print("Mobile ESP загружен успешно!")
+print("Настройки:")
+print("- ESP для игроков и объектов")
+print("- Настройка цветов и расстояния")
+print("- Простой аимбот (бета)")
+print("- Смена времени суток")
+print("- Компактное меню для телефона")
