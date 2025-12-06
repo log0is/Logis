@@ -1,0 +1,776 @@
+-- =============================================
+-- СКОМБИНИРОВАННЫЙ ESP + SILENT AIM СКРИПТ
+-- Аим работает только на подсвеченных ESP игроков
+-- =============================================
+
+local Camera = workspace.CurrentCamera
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+
+-- =============================================
+-- ESP СИСТЕМА
+-- =============================================
+
+local esp_table = {
+    __loaded = false,
+    main_settings = {
+        textSize = 15,
+        textFont = Drawing.Fonts.Monospace,
+        distancelimit = false,
+        maxdistance = 1000,
+        useteamcolor = false,
+        teamcheck = false,
+        sleepcheck = true,
+        simplecalc = true
+    },
+    settings = {
+        enemy = {
+            enabled = true,
+            box = true,
+            box_fill = true,
+            realname = true,
+            dist = true,
+            weapon = true,
+            skeleton = true,
+            tracers = true,
+            box_outline = true,
+            realname_outline = true,
+            dist_outline = true,
+            weapon_outline = true,
+            box_color = { Color3.new(1, 1, 1), 1 },
+            box_fill_color = { Color3.new(1, 0, 0), 0.3 },
+            realname_color = { Color3.new(1, 1, 1), 1 },
+            dist_color = { Color3.new(1, 1, 1), 1 },
+            weapon_color = { Color3.new(1, 1, 1), 1 },
+            skeleton_color = { Color3.new(1, 1, 1), 1 },
+            tracer_color = { Color3.new(1, 1, 1), 1 },
+            box_outline_color = { Color3.new(0, 0, 0), 1 },
+            realname_outline_color = Color3.new(0, 0, 0),
+            dist_outline_color = Color3.new(0, 0, 0),
+            weapon_outline_color = Color3.new(0, 0, 0),
+            chams = true,
+            chams_visible_only = false,
+            chams_fill_color = { Color3.new(1, 1, 1), 0.5 },
+            chamsoutline_color = { Color3.new(1, 1, 1), 0 }
+        }
+    }
+}
+
+local container = Instance.new("Folder", CoreGui.RobloxGui)
+container.Name = "ESPContainer"
+
+local skeleton_order = {
+    ["LeftFoot"] = "LeftLowerLeg", ["LeftLowerLeg"] = "LeftUpperLeg", ["LeftUpperLeg"] = "LowerTorso",
+    ["RightFoot"] = "RightLowerLeg", ["RightLowerLeg"] = "RightUpperLeg", ["RightUpperLeg"] = "LowerTorso",
+    ["LeftHand"] = "LeftLowerArm", ["LeftLowerArm"] = "LeftUpperArm", ["LeftUpperArm"] = "Torso",
+    ["RightHand"] = "RightLowerArm", ["RightLowerArm"] = "RightUpperArm", ["RightUpperArm"] = "Torso",
+    ["LowerTorso"] = "Torso", ["Torso"] = "Head"
+}
+
+local GetFunction = function(Script, Line)
+    for _, v in pairs(getgc()) do
+        if typeof(v) == "function" and debug.info(v, "sl") then
+            local src, lineNum = debug.info(v, "s"), debug.info(v, "l")
+            if src:find(Script) and lineNum == Line then
+                return v
+            end
+        end
+    end
+    return nil
+end
+
+local SetInfraredEnabled = GetFunction("PlayerClient", 588)
+local PlayerReg = SetInfraredEnabled and debug.getupvalue(SetInfraredEnabled, 2) or {}
+
+-- =============================================
+-- SILENT AIM СИСТЕМА
+-- =============================================
+
+local baseRadius = 199
+local silentAimActive = true
+local aimOnESPPlayersOnly = true -- Аим только на игроков с ESP
+
+-- FOV круг для аима
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "SilentAimUI"
+screenGui.Parent = game.CoreGui
+
+local fovCircle = Instance.new("Frame")
+fovCircle.Name = "FOVCircle"
+fovCircle.Size = UDim2.new(0, baseRadius * 2, 0, baseRadius * 2)
+fovCircle.Position = UDim2.new(0.5, -baseRadius, 0.5, -baseRadius)
+fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+fovCircle.BackgroundTransparency = 1
+fovCircle.BorderSizePixel = 2
+fovCircle.BorderColor3 = Color3.new(0, 1, 0) -- Зеленый
+fovCircle.Visible = true
+fovCircle.ZIndex = 5
+fovCircle.Parent = screenGui
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(1, 0)
+UICorner.Parent = fovCircle
+
+-- Индикатор текущей цели
+local targetIndicator = Instance.new("Frame")
+targetIndicator.Name = "TargetIndicator"
+targetIndicator.Size = UDim2.new(0, 10, 0, 10)
+targetIndicator.BackgroundTransparency = 1
+targetIndicator.BorderSizePixel = 3
+targetIndicator.BorderColor3 = Color3.new(1, 0, 0) -- Красный
+targetIndicator.Visible = false
+targetIndicator.ZIndex = 10
+targetIndicator.Parent = screenGui
+
+local targetCorner = Instance.new("UICorner")
+targetCorner.CornerRadius = UDim.new(1, 0)
+targetCorner.Parent = targetIndicator
+
+-- Текстовая информация о аиме
+local aimInfo = Instance.new("TextLabel")
+aimInfo.Name = "AimInfo"
+aimInfo.Size = UDim2.new(0, 200, 0, 50)
+aimInfo.Position = UDim2.new(0, 10, 0, 10)
+aimInfo.BackgroundTransparency = 0.7
+aimInfo.BackgroundColor3 = Color3.new(0, 0, 0)
+aimInfo.TextColor3 = Color3.new(1, 1, 1)
+aimInfo.TextSize = 14
+aimInfo.TextXAlignment = Enum.TextXAlignment.Left
+aimInfo.TextYAlignment = Enum.TextYAlignment.Top
+aimInfo.TextWrapped = true
+aimInfo.Font = Enum.Font.Code
+aimInfo.Text = "Silent Aim: ON\nMode: ESP Players Only"
+aimInfo.ZIndex = 15
+aimInfo.Parent = screenGui
+
+-- =============================================
+-- СПИСКИ ДЛЯ СИНХРОНИЗАЦИИ ESP И AIM
+-- =============================================
+
+local espPlayers = {} -- Игроки с активным ESP
+local loaded_plrs = {} -- Для ESP системы
+
+-- Функция для добавления игрока в список аима
+local function AddPlayerToAimList(playerModel, isSleeping)
+    if not playerModel then return end
+    
+    local playerId = nil
+    for _, v in pairs(PlayerReg) do
+        if v and v.model == playerModel then
+            playerId = v.id
+            break
+        end
+    end
+    
+    if not playerId then
+        local plr = Players:GetPlayerFromCharacter(playerModel)
+        playerId = plr and plr.UserId
+    end
+    
+    if playerId then
+        espPlayers[playerModel] = {
+            model = playerModel,
+            id = playerId,
+            sleeping = isSleeping,
+            lastUpdate = tick()
+        }
+        print("[AIM] Добавлен в список аима: " .. playerModel.Name .. (isSleeping and " (SLEEPING)" or ""))
+    end
+end
+
+-- Функция для удаления игрока из списка аима
+local function RemovePlayerFromAimList(playerModel)
+    if espPlayers[playerModel] then
+        print("[AIM] Удален из списка аима: " .. playerModel.Name)
+        espPlayers[playerModel] = nil
+    end
+end
+
+-- =============================================
+-- ESP ФУНКЦИИ
+-- =============================================
+
+local function worldToScreen(world)
+    local screen, inBounds = Camera:WorldToViewportPoint(world)
+    return Vector2.new(math.floor(screen.X), math.floor(screen.Y)), inBounds, screen.Z
+end
+
+local function calculateCornersSimple(head, hrp)
+    local head_position = worldToScreen(head.Position - Vector3.new(0, 0.5, 0))
+    local leg_position = worldToScreen(hrp.Position - Vector3.new(0, 3.5, 0))
+    local headx, heady = head_position.X, head_position.Y
+    local legx, legy = leg_position.X, leg_position.Y
+    local height = legy - heady
+    local width = height / 3.6
+    return {
+        topLeft = Vector2.new(headx - width, heady),
+        topRight = Vector2.new(headx + width, heady),
+        bottomLeft = Vector2.new(headx - width, legy),
+        bottomRight = Vector2.new(headx + width, legy)
+    }
+end
+
+local function getRainbowColor()
+    local time = tick() * 0.5
+    local r = (math.sin(time) + 1) / 2
+    local g = (math.sin(time + 2 * math.pi / 3) + 1) / 2
+    local b = (math.sin(time + 4 * math.pi / 3) + 1) / 2
+    return Color3.new(r, g, b)
+end
+
+local esp = {
+    create_obj = function(type, args)
+        local obj = Drawing.new(type)
+        for i, v in args do
+            obj[i] = v
+        end
+        return obj
+    end
+}
+
+local function getPlayerIdFromModel(model)
+    if not model then return nil, false end
+    for _, player in next, PlayerReg do
+        if player and player.model == model then
+            return player.id, player.sleeping
+        end
+    end
+    local plr = Players:GetPlayerFromCharacter(model)
+    return plr and plr.UserId, false
+end
+
+local function create_player_esp(model)
+    if not (model and model:FindFirstChild("Head") and model:FindFirstChild("LowerTorso")) then
+        return
+    end
+    
+    local player = Players:GetPlayerFromCharacter(model)
+    local settings = esp_table.settings.enemy
+    local playerId, isSleeping = getPlayerIdFromModel(model)
+    
+    -- Добавляем игрока в список аима
+    AddPlayerToAimList(model, isSleeping)
+    
+    local playerName = player and player.Name or "Player"
+    loaded_plrs[model] = {
+        obj = {
+            box_fill = esp.create_obj("Square", { Filled = true, Visible = false }),
+            box_outline = esp.create_obj("Square", { Filled = false, Thickness = 3, Visible = false, ZIndex = -1 }),
+            box = esp.create_obj("Square", { Filled = false, Thickness = 1, Visible = false }),
+            realname = esp.create_obj("Text", { Center = true, Visible = settings.realname }),
+            tracer = esp.create_obj("Line", { Thickness = 1, Visible = false })
+        },
+        chams_object = Instance.new("Highlight", container),
+        weapon_esp = playerId and esp.create_obj("Text", {
+            Text = "[NONE]",
+            Size = 17,
+            Color = getRainbowColor(),
+            Outline = true,
+            OutlineColor = Color3.fromRGB(0, 0, 0),
+            Center = true,
+            Visible = false
+        }) or nil,
+        dist_esp = playerId and esp.create_obj("Text", {
+            Text = "0",
+            Size = 17,
+            Color = getRainbowColor(),
+            Outline = true,
+            OutlineColor = Color3.fromRGB(0, 0, 0),
+            Center = true,
+            Visible = false
+        }) or nil
+    }
+    
+    for required, _ in next, skeleton_order do
+        loaded_plrs[model].obj["skeleton_" .. required] = esp.create_obj("Line", { Visible = false })
+    end
+
+    if isSleeping then
+        loaded_plrs[model].chams_object.Enabled = false
+    else
+        loaded_plrs[model].chams_object.Enabled = settings.chams
+    end
+
+    local character = model
+    local head = model:FindFirstChild("Head")
+    local lowertorso = model:FindFirstChild("LowerTorso")
+    local plr = loaded_plrs[model]
+    local obj = plr.obj
+    local cham = plr.chams_object
+    local weapon_esp = plr.weapon_esp
+    local dist_esp = plr.dist_esp
+
+    local function forceupdate()
+        if not (obj and cham) then return end
+        local rainbowColor = getRainbowColor()
+        cham.DepthMode = settings.chams_visible_only and Enum.HighlightDepthMode.Occluded or Enum.HighlightDepthMode.AlwaysOnTop
+        cham.FillColor = rainbowColor
+        cham.FillTransparency = settings.chams_fill_color[2]
+        cham.OutlineColor = rainbowColor
+        cham.OutlineTransparency = settings.chamsoutline_color[2]
+
+        obj.box.Transparency = settings.box_color[2]
+        obj.box.Color = rainbowColor
+        obj.box_outline.Transparency = settings.box_outline_color[2]
+        obj.box_outline.Color = settings.box_outline_color[1]
+        obj.box_fill.Color = rainbowColor
+        obj.box_fill.Transparency = settings.box_fill_color[2]
+
+        obj.realname.Size = esp_table.main_settings.textSize
+        obj.realname.Font = esp_table.main_settings.textFont
+        obj.realname.Color = rainbowColor
+        obj.realname.Outline = settings.realname_outline
+        obj.realname.OutlineColor = settings.realname_outline_color
+        obj.realname.Transparency = settings.realname_color[2]
+
+        obj.tracer.Color = rainbowColor
+        obj.tracer.Transparency = settings.tracer_color[2]
+
+        if weapon_esp then weapon_esp.Color = rainbowColor end
+        if dist_esp then dist_esp.Color = rainbowColor end
+
+        cham.Enabled = not isSleeping and settings.chams
+        obj.box.Visible = not isSleeping and settings.box
+        obj.box_outline.Visible = not isSleeping and settings.box_outline
+        obj.box_fill.Visible = not isSleeping and settings.box_fill
+        obj.realname.Visible = settings.realname
+        obj.tracer.Visible = not isSleeping and settings.tracers
+        if weapon_esp then weapon_esp.Visible = not isSleeping and settings.weapon end
+        if dist_esp then dist_esp.Visible = not isSleeping and settings.dist end
+
+        for required, _ in next, skeleton_order do
+            local skeletonobj = obj["skeleton_" .. required]
+            if skeletonobj then
+                skeletonobj.Color = rainbowColor
+                skeletonobj.Transparency = settings.skeleton_color[2]
+                skeletonobj.Visible = not isSleeping and settings.skeleton
+            end
+        end
+    end
+
+    local function togglevis(bool)
+        if not obj then return end
+        for _, v in obj do
+            if v and v.Visible ~= nil then
+                v.Visible = bool and (v == obj.realname or not isSleeping)
+            end
+        end
+        if cham then
+            cham.Enabled = bool and not isSleeping and settings.chams
+        end
+        if weapon_esp then weapon_esp.Visible = bool and not isSleeping and settings.weapon end
+        if dist_esp then dist_esp.Visible = bool and not isSleeping and settings.dist end
+        for required, _ in next, skeleton_order do
+            local skeletonobj = obj["skeleton_" .. required]
+            if skeletonobj then
+                skeletonobj.Visible = bool and not isSleeping and settings.skeleton
+            end
+        end
+    end
+
+    plr.connection = RunService.RenderStepped:Connect(function()
+        if not (head and character and lowertorso) then
+            togglevis(false)
+            return
+        end
+        
+        -- Обновляем статус сна
+        local currentPlayerId, currentIsSleeping = getPlayerIdFromModel(model)
+        if currentIsSleeping ~= isSleeping then
+            isSleeping = currentIsSleeping
+            espPlayers[model].sleeping = isSleeping
+        end
+        
+        local _, onScreen = worldToScreen(head.Position)
+        if not onScreen then
+            togglevis(false)
+            return
+        end
+
+        local distance = (Camera.CFrame.Position - head.Position).Magnitude
+        if esp_table.main_settings.distancelimit and distance > esp_table.main_settings.maxdistance then
+            togglevis(false)
+            return
+        end
+
+        togglevis(true)
+        cham.Adornee = character
+        forceupdate()
+
+        local corners = calculateCornersSimple(head, lowertorso)
+        if not corners then
+            togglevis(false)
+            return
+        end
+
+        local pos = corners.topLeft
+        local size = corners.bottomRight - corners.topLeft
+        obj.box.Position = pos
+        obj.box.Size = size
+        obj.box_outline.Position = pos + Vector2.new(1, 1)
+        obj.box_outline.Size = size - Vector2.new(1, 1)
+        obj.box_fill.Position = pos
+        obj.box_fill.Size = size
+
+        obj.realname.Position = corners.topLeft + (corners.topRight - corners.topLeft) / 2 - Vector2.new(0, obj.realname.TextBounds.Y + 2)
+
+        if not isSleeping then
+            local bottom = (corners.bottomLeft + corners.bottomRight) * 0.5
+            if playerId and weapon_esp and dist_esp then
+                local playerData = nil
+                for _, v in next, PlayerReg do
+                    if v and v.id == playerId and not v.sleeping then
+                        playerData = v
+                        break
+                    end
+                end
+                if playerData then
+                    local WeaponFound = playerData.equippedItem and playerData.equippedItem.type or "None"
+                    weapon_esp.Text = "[" .. WeaponFound:lower() .. "]"
+                    weapon_esp.Position = bottom + Vector2.new(0, 2)
+                    dist_esp.Text = tostring(math.floor(distance))
+                    dist_esp.Position = bottom + Vector2.new(0, weapon_esp.TextBounds.Y + 4)
+                end
+            end
+        end
+
+        if settings.skeleton then
+            for _, part in next, character:GetChildren() do
+                local skeletonobj = obj["skeleton_" .. part.Name]
+                local parent_part = skeleton_order[part.Name] and character:FindFirstChild(skeleton_order[part.Name])
+                if skeletonobj and parent_part then
+                    local part_position, _ = Camera:WorldToViewportPoint(part.Position)
+                    local parent_part_position, _ = Camera:WorldToViewportPoint(parent_part.CFrame.Position)
+                    skeletonobj.From = Vector2.new(part_position.X, part_position.Y)
+                    skeletonobj.To = Vector2.new(parent_part_position.X, parent_part_position.Y)
+                end
+            end
+        end
+
+        if settings.tracers then
+            local torsoPos, onScreenTorso = worldToScreen(lowertorso.Position)
+            if onScreenTorso then
+                local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+                obj.tracer.From = screenCenter
+                obj.tracer.To = torsoPos
+            else
+                obj.tracer.Visible = false
+            end
+        end
+    end)
+
+    forceupdate()
+end
+
+local function destroy_esp(model)
+    -- Удаляем из списка аима
+    RemovePlayerFromAimList(model)
+    
+    local plr_object = loaded_plrs[model]
+    if not plr_object then return end
+    
+    if plr_object.connection then
+        plr_object.connection:Disconnect()
+    end
+    
+    for _, v in plr_object.obj do
+        if v then v:Remove() end
+    end
+    
+    if plr_object.chams_object then
+        plr_object.chams_object:Destroy()
+    end
+    
+    if plr_object.weapon_esp then plr_object.weapon_esp:Remove() end
+    if plr_object.dist_esp then plr_object.dist_esp:Remove() end
+    
+    loaded_plrs[model] = nil
+end
+
+-- =============================================
+-- SILENT AIM ФУНКЦИИ
+-- =============================================
+
+function GetClosestTargetInFOV()
+    if not silentAimActive then return nil end
+    
+    local closestTarget = nil
+    local closestDistance = math.huge
+    local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    
+    for model, data in pairs(espPlayers) do
+        -- Проверяем только игроков с ESP если включен режим
+        if aimOnESPPlayersOnly and not loaded_plrs[model] then
+            continue
+        end
+        
+        if model and model:FindFirstChild("Head") then
+            local head = model.Head
+            local screenPoint = Camera:WorldToViewportPoint(head.Position)
+            
+            if screenPoint.Z > 0 then
+                local screenPos = Vector2.new(screenPoint.X, screenPoint.Y)
+                local distanceFromCenter = (screenPos - screenCenter).Magnitude
+                
+                -- Проверяем что цель в пределах FOV
+                if distanceFromCenter <= baseRadius then
+                    local distanceToPlayer = (head.Position - Camera.CFrame.Position).Magnitude
+                    
+                    if distanceToPlayer < closestDistance then
+                        closestDistance = distanceToPlayer
+                        closestTarget = model
+                    end
+                end
+            end
+        end
+    end
+    
+    return closestTarget, closestDistance
+end
+
+-- Функция для установки хука камеры
+local function SetupAimHook()
+    -- Ищем CameraClient
+    local CameraClient = nil
+    
+    if getrenv and getrenv()._G and getrenv()._G.classes then
+        CameraClient = getrenv()._G.classes.Camera
+    end
+    
+    if not CameraClient and game:GetService("ReplicatedStorage"):FindFirstChild("Classes") then
+        local success, classes = pcall(require, game:GetService("ReplicatedStorage").Classes)
+        if success and classes.Camera then
+            CameraClient = classes.Camera
+        end
+    end
+    
+    if CameraClient and CameraClient.GetCFrame then
+        local oldGetCFrame = CameraClient.GetCFrame
+        
+        CameraClient.GetCFrame = function(...)
+           local function SetupAimHook()
+    -- Ищем CameraClient
+    local CameraClient = nil
+    
+    if getrenv and getrenv()._G and getrenv()._G.classes then
+        CameraClient = getrenv()._G.classes.Camera
+    end
+    
+    if not CameraClient and game:GetService("ReplicatedStorage"):FindFirstChild("Classes") then
+        local success, classes = pcall(require, game:GetService("ReplicatedStorage").Classes)
+        if success and classes.Camera then
+            CameraClient = classes.Camera
+        end
+    end
+    
+    if CameraClient and CameraClient.GetCFrame then
+        local oldGetCFrame = CameraClient.GetCFrame
+        
+        CameraClient.GetCFrame = function(...)
+            if silentAimActive then
+                local closestTarget, distance = GetClosestTargetInFOV()
+                
+                if closestTarget and closestTarget:FindFirstChild("Head") then
+                    -- Обновляем индикатор цели
+                    local screenPoint = Camera:WorldToViewportPoint(closestTarget.Head.Position)
+                    if screenPoint.Z > 0 then
+                        targetIndicator.Visible = true
+                        targetIndicator.Position = UDim2.new(0, screenPoint.X - 5, 0, screenPoint.Y - 5)
+                    end
+                    
+                    -- Возвращаем CFrame направленный на цель
+                    local headPos = closestTarget.Head.Position
+                    local cameraPos = Camera.CFrame.Position
+                    return CFrame.new(cameraPos, headPos)
+                else
+                    targetIndicator.Visible = false
+                end
+            end
+            
+            return oldGetCFrame(...)
+        end
+        
+        print("[AIM] Хук камеры установлен!")
+        return true
+    end
+    
+    print("[AIM] CameraClient не найден, используется только визуализация")
+    return false
+end
+
+-- =============================================
+-- ОБНОВЛЕНИЕ ВИЗУАЛИЗАЦИИ
+-- =============================================
+
+local lastDebugUpdate = 0
+local hookInstalled = false
+
+RunService.RenderStepped:Connect(function(deltaTime)
+    -- Обновляем FOV круг
+    local fovScale = (math.tan(math.rad(50)) / math.tan(math.rad(Camera.FieldOfView))) ^ 0.35
+    local newRadius = baseRadius * fovScale
+    
+    fovCircle.Size = UDim2.new(0, newRadius * 2, 0, newRadius * 2)
+    fovCircle.Position = UDim2.new(0.5, -newRadius, 0.5, -newRadius)
+    
+    -- Обновляем информацию
+    lastDebugUpdate = lastDebugUpdate + deltaTime
+    if lastDebugUpdate > 0.5 then
+        local targetCount = 0
+        for _ in pairs(espPlayers) do
+            targetCount = targetCount + 1
+        end
+        
+        aimInfo.Text = string.format(
+            "Silent Aim: %s\nMode: ESP Players Only\nTargets: %d\nFOV: %d",
+            silentAimActive and "ON" : "OFF",
+            targetCount,
+            baseRadius
+        )
+        
+        lastDebugUpdate = 0
+    end
+    
+    -- Пробуем установить хук если еще не установлен
+    if not hookInstalled then
+        hookInstalled = pcall(SetupAimHook)
+    end
+end)
+
+-- =============================================
+-- ИНИЦИАЛИЗАЦИЯ ESP
+-- =============================================
+
+function esp_table.load()
+    if esp_table.__loaded then return end
+    
+    for _, v in next, workspace:GetChildren() do
+        if v:IsA("Model") then
+            task.spawn(function()
+                task.wait(0.5)
+                create_player_esp(v)
+            end)
+        end
+    end
+    
+    esp_table.playerAdded = Players.PlayerAdded:Connect(function(player)
+        print("New player joined: " .. player.Name)
+        player.CharacterAdded:Connect(function(character)
+            print("Character added for: " .. player.Name)
+            task.spawn(function()
+                task.wait(0.5)
+                create_player_esp(character)
+            end)
+        end)
+    end)
+    
+    esp_table.playerRemoving = workspace.ChildRemoved:Connect(function(child)
+        if child:IsA("Model") then
+            destroy_esp(child)
+        end
+    end)
+    
+    esp_table.__loaded = true
+end
+
+function esp_table.unload()
+    if not esp_table.__loaded then return end
+    
+    for model, _ in pairs(loaded_plrs) do
+        destroy_esp(model)
+    end
+    
+    espPlayers = {}
+    
+    if esp_table.playerAdded then
+        esp_table.playerAdded:Disconnect()
+    end
+    
+    if esp_table.playerRemoving then
+        esp_table.playerRemoving:Disconnect()
+    end
+    
+    esp_table.__loaded = false
+end
+
+-- =============================================
+-- УПРАВЛЕНИЕ ЧЕРЕЗ КОНСОЛЬ
+-- =============================================
+
+_G.ESP_AIM = {
+    -- Управление ESP
+    ToggleESP = function()
+        if esp_table.__loaded then
+            esp_table.unload()
+            print("ESP выключен")
+        else
+            esp_table.load()
+            print("ESP включен")
+        end
+    end,
+    
+    -- Управление аимом
+    ToggleAim = function()
+        silentAimActive = not silentAimActive
+        targetIndicator.Visible = false
+        print("Silent Aim: " .. (silentAimActive and "ON" : "OFF"))
+    end,
+    
+    SetFOV = function(radius)
+        baseRadius = radius
+        print("FOV установлен на: " .. radius)
+    end,
+    
+    ToggleMode = function()
+        aimOnESPPlayersOnly = not aimOnESPPlayersOnly
+        print("Режим аима: " .. (aimOnESPPlayersOnly and "Только ESP игроки" : "Все игроки"))
+    end,
+    
+    GetTargets = function()
+        print("=== ESP Aim Targets ===")
+        print("Всего целей: " .. #espPlayers)
+        
+        local i = 1
+        for model, data in pairs(espPlayers) do
+            local distance = model:FindFirstChild("Head") and (model.Head.Position - Camera.CFrame.Position).Magnitude or 0
+            print(string.format("%d. %s (Sleeping: %s, Distance: %.1f)", 
+                i, model.Name, data.sleeping and "Yes" : "No", distance))
+            i = i + 1
+        end
+    end,
+    
+    ReinstallHook = function()
+        hookInstalled = false
+        print("Переустановка хука...")
+    end
+}
+
+-- =============================================
+-- ЗАПУСК СИСТЕМЫ
+-- =============================================
+
+print("=============================================")
+print("ESP + SILENT AIM SYSTEM LOADED")
+print("=============================================")
+print("ESP: Включен автоматически")
+print("Silent Aim: Включен (только на ESP игроков)")
+print("=============================================")
+print("Используйте _G.ESP_AIM в консоли:")
+print("  ToggleESP() - вкл/выкл ESP")
+print("  ToggleAim() - вкл/выкл Silent Aim")
+print("  SetFOV(число) - изменить размер FOV")
+print("  ToggleMode() - переключить режим аима")
+print("  GetTargets() - показать список целей")
+print("  ReinstallHook() - переустановить хук")
+print("=============================================")
+
+-- Запускаем ESP
+esp_table.load()
+
+-- Очистка при выходе
+game:GetService("Players").LocalPlayer.CharacterRemoving:Connect(function()
+    esp_table.unload()
+    screenGui:Destroy()
+    _G.ESP_AIM = nil
+end)
