@@ -1,0 +1,586 @@
+-- FABRICATED VALUES!!!
+local type_custom = typeof
+if not LPH_OBFUSCATED then
+    LPH_JIT = function(...) return ... end
+    LPH_JIT_MAX = function(...) return ... end
+    LPH_NO_VIRTUALIZE = function(...) return ... end
+    LPH_NO_UPVALUES = function(f) return function(...) return f(...) end end
+    LPH_ENCSTR = function(...) return ... end
+    LPH_ENCNUM = function(...) return ... end
+    LPH_ENCFUNC = function(func, key1, key2) if key1 ~= key2 then return print("LPH_ENCFUNC mismatch") end return func end
+    LPH_CRASH = function() return print(debug.traceback()) end
+    SWG_Title = 'Phone ESP | %s'
+    SWG_Version = "mobile"
+    SWG_FullName = 'v1.0'
+    SWG_ShortName = 'mobile'
+end
+--- FABRICATED VALUES END!!!
+
+local workspace = cloneref(game:GetService("Workspace"))
+local Players = cloneref(game:GetService("Players"))
+local RunService = cloneref(game:GetService("RunService"))
+local Lighting = cloneref(game:GetService("Lighting"))
+local UserInputService = cloneref(game:GetService("UserInputService"))
+local HttpService = cloneref(game:GetService("HttpService"))
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- Mobile-friendly GUI library
+local function createMobileGUI()
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "PhoneESP"
+    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    screenGui.Parent = game.CoreGui or LocalPlayer:WaitForChild("PlayerGui")
+    
+    -- Main container
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Name = "MainFrame"
+    mainFrame.Size = UDim2.new(0, 180, 0, 40) -- Compact size for phone
+    mainFrame.Position = UDim2.new(0, 10, 0, 10) -- Top left corner
+    mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    mainFrame.BackgroundTransparency = 0.3
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Parent = screenGui
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = mainFrame
+    
+    -- Title bar
+    local titleBar = Instance.new("Frame")
+    titleBar.Name = "TitleBar"
+    titleBar.Size = UDim2.new(1, 0, 0, 25)
+    titleBar.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+    titleBar.BorderSizePixel = 0
+    titleBar.Parent = mainFrame
+    
+    local titleCorner = Instance.new("UICorner")
+    titleCorner.CornerRadius = UDim.new(0, 8)
+    titleCorner.Parent = titleBar
+    
+    local titleText = Instance.new("TextLabel")
+    titleText.Name = "Title"
+    titleText.Size = UDim2.new(1, 0, 1, 0)
+    titleText.BackgroundTransparency = 1
+    titleText.Text = string.format(SWG_Title, SWG_Version)
+    titleText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    titleText.TextSize = 14
+    titleText.Font = Enum.Font.GothamMedium
+    titleText.Parent = titleBar
+    
+    -- Toggle button for menu
+    local toggleButton = Instance.new("TextButton")
+    toggleButton.Name = "ToggleMenu"
+    toggleButton.Size = UDim2.new(1, 0, 0, 30)
+    toggleButton.Position = UDim2.new(0, 0, 0, 25)
+    toggleButton.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+    toggleButton.BackgroundTransparency = 0
+    toggleButton.Text = "▶ Открыть меню"
+    toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleButton.TextSize = 12
+    toggleButton.Font = Enum.Font.Gotham
+    toggleButton.Parent = mainFrame
+    
+    -- Menu container (hidden by default)
+    local menuContainer = Instance.new("Frame")
+    menuContainer.Name = "MenuContainer"
+    menuContainer.Size = UDim2.new(1, 0, 0, 0) -- Start collapsed
+    menuContainer.Position = UDim2.new(0, 0, 0, 55)
+    menuContainer.BackgroundTransparency = 1
+    menuContainer.ClipsDescendants = true
+    menuContainer.Parent = mainFrame
+    
+    local menuContent = Instance.new("Frame")
+    menuContent.Name = "MenuContent"
+    menuContent.Size = UDim2.new(1, 0, 0, 0)
+    menuContent.BackgroundTransparency = 1
+    menuContent.Parent = menuContainer
+    
+    local uiListLayout = Instance.new("UIListLayout")
+    uiListLayout.Padding = UDim.new(0, 5)
+    uiListLayout.Parent = menuContent
+    
+    -- Draggable functionality for phones
+    local dragging = false
+    local dragStart, frameStart
+    
+    titleBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            frameStart = mainFrame.Position
+        end
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+            local delta = input.Position - dragStart
+            mainFrame.Position = UDim2.new(
+                frameStart.X.Scale, 
+                frameStart.X.Offset + delta.X,
+                frameStart.Y.Scale,
+                frameStart.Y.Offset + delta.Y
+            )
+        end
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+    
+    -- Mobile controls for toggling ESP
+    local function createMobileToggle(name, defaultValue, callback)
+        local toggleFrame = Instance.new("Frame")
+        toggleFrame.Name = name
+        toggleFrame.Size = UDim2.new(1, -10, 0, 30)
+        toggleFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+        toggleFrame.BackgroundTransparency = 0.1
+        toggleFrame.Parent = menuContent
+        
+        local toggleCorner = Instance.new("UICorner")
+        toggleCorner.CornerRadius = UDim.new(0, 6)
+        toggleCorner.Parent = toggleFrame
+        
+        local toggleText = Instance.new("TextLabel")
+        toggleText.Name = "Text"
+        toggleText.Size = UDim2.new(0.7, 0, 1, 0)
+        toggleText.BackgroundTransparency = 1
+        toggleText.Text = name
+        toggleText.TextColor3 = Color3.fromRGB(255, 255, 255)
+        toggleText.TextSize = 12
+        toggleText.Font = Enum.Font.Gotham
+        toggleText.TextXAlignment = Enum.TextXAlignment.Left
+        toggleText.Position = UDim2.new(0, 10, 0, 0)
+        toggleText.Parent = toggleFrame
+        
+        local toggleButton = Instance.new("TextButton")
+        toggleButton.Name = "ToggleButton"
+        toggleButton.Size = UDim2.new(0, 50, 0, 20)
+        toggleButton.Position = UDim2.new(1, -60, 0.5, -10)
+        toggleButton.BackgroundColor3 = defaultValue and Color3.fromRGB(0, 200, 0) or Color3.fromRGB(200, 0, 0)
+        toggleButton.Text = defaultValue and "ON" or "OFF"
+        toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        toggleButton.TextSize = 11
+        toggleButton.Font = Enum.Font.GothamBold
+        toggleButton.Parent = toggleFrame
+        
+        local toggleCorner2 = Instance.new("UICorner")
+        toggleCorner2.CornerRadius = UDim.new(0, 4)
+        toggleCorner2.Parent = toggleButton
+        
+        toggleButton.MouseButton1Click:Connect(function()
+            local newValue = not defaultValue
+            defaultValue = newValue
+            toggleButton.BackgroundColor3 = newValue and Color3.fromRGB(0, 200, 0) or Color3.fromRGB(200, 0, 0)
+            toggleButton.Text = newValue and "ON" or "OFF"
+            callback(newValue)
+        end)
+        
+        menuContent.Size = UDim2.new(1, 0, 0, menuContent.AbsoluteContentSize.Y + 35)
+        menuContainer.Size = UDim2.new(1, 0, 0, menuContent.Size.Y.Offset)
+        
+        return {
+            SetValue = function(value)
+                defaultValue = value
+                toggleButton.BackgroundColor3 = value and Color3.fromRGB(0, 200, 0) or Color3.fromRGB(200, 0, 0)
+                toggleButton.Text = value and "ON" or "OFF"
+            end,
+            GetValue = function() return defaultValue end
+        }
+    end
+    
+    -- Mobile color picker
+    local function createColorPicker(name, defaultColor, callback)
+        local colorFrame = Instance.new("Frame")
+        colorFrame.Name = name
+        colorFrame.Size = UDim2.new(1, -10, 0, 35)
+        colorFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+        colorFrame.BackgroundTransparency = 0.1
+        colorFrame.Parent = menuContent
+        
+        local colorCorner = Instance.new("UICorner")
+        colorCorner.CornerRadius = UDim.new(0, 6)
+        colorCorner.Parent = colorFrame
+        
+        local colorText = Instance.new("TextLabel")
+        colorText.Name = "Text"
+        colorText.Size = UDim2.new(0.7, 0, 1, 0)
+        colorText.BackgroundTransparency = 1
+        colorText.Text = name
+        colorText.TextColor3 = Color3.fromRGB(255, 255, 255)
+        colorText.TextSize = 12
+        colorText.Font = Enum.Font.Gotham
+        colorText.TextXAlignment = Enum.TextXAlignment.Left
+        colorText.Position = UDim2.new(0, 10, 0, 0)
+        colorText.Parent = colorFrame
+        
+        local colorPreview = Instance.new("Frame")
+        colorPreview.Name = "Preview"
+        colorPreview.Size = UDim2.new(0, 50, 0, 20)
+        colorPreview.Position = UDim2.new(1, -60, 0.5, -10)
+        colorPreview.BackgroundColor3 = defaultColor
+        colorPreview.Parent = colorFrame
+        
+        local previewCorner = Instance.new("UICorner")
+        previewCorner.CornerRadius = UDim.new(0, 4)
+        previewCorner.Parent = colorPreview
+        
+        local colorPicker = Instance.new("TextButton")
+        colorPicker.Name = "Picker"
+        colorPicker.Size = UDim2.new(1, 0, 1, 0)
+        colorPicker.BackgroundTransparency = 1
+        colorPicker.Text = ""
+        colorPicker.Parent = colorPreview
+        
+        colorPicker.MouseButton1Click:Connect(function()
+            -- Simple color picker for mobile
+            local colors = {
+                Color3.fromRGB(255, 50, 50),    -- Red
+                Color3.fromRGB(50, 255, 50),    -- Green
+                Color3.fromRGB(50, 50, 255),    -- Blue
+                Color3.fromRGB(255, 255, 50),   -- Yellow
+                Color3.fromRGB(255, 50, 255),   -- Magenta
+                Color3.fromRGB(50, 255, 255),   -- Cyan
+                Color3.fromRGB(255, 255, 255)   -- White
+            }
+            
+            local currentIndex = 1
+            for i, color in ipairs(colors) do
+                if math.abs(color.R - defaultColor.R) < 0.1 and 
+                   math.abs(color.G - defaultColor.G) < 0.1 and 
+                   math.abs(color.B - defaultColor.B) < 0.1 then
+                    currentIndex = i
+                    break
+                end
+            end
+            
+            local nextIndex = (currentIndex % #colors) + 1
+            local newColor = colors[nextIndex]
+            colorPreview.BackgroundColor3 = newColor
+            defaultColor = newColor
+            callback(newColor)
+        end)
+        
+        menuContent.Size = UDim2.new(1, 0, 0, menuContent.AbsoluteContentSize.Y + 40)
+        menuContainer.Size = UDim2.new(1, 0, 0, menuContent.Size.Y.Offset)
+        
+        return {
+            SetColor = function(color)
+                colorPreview.BackgroundColor3 = color
+                defaultColor = color
+            end,
+            GetColor = function() return defaultColor end
+        }
+    end
+    
+    -- Toggle menu functionality
+    local menuExpanded = false
+    toggleButton.MouseButton1Click:Connect(function()
+        menuExpanded = not menuExpanded
+        if menuExpanded then
+            menuContainer.Size = UDim2.new(1, 0, 0, menuContent.Size.Y.Offset)
+            mainFrame.Size = UDim2.new(0, 180, 0, 55 + menuContent.Size.Y.Offset)
+            toggleButton.Text = "▼ Скрыть меню"
+        else
+            menuContainer.Size = UDim2.new(1, 0, 0, 0)
+            mainFrame.Size = UDim2.new(0, 180, 0, 55)
+            toggleButton.Text = "▶ Открыть меню"
+        end
+    end)
+    
+    return {
+        ScreenGui = screenGui,
+        CreateToggle = createMobileToggle,
+        CreateColorPicker = createColorPicker,
+        MainFrame = mainFrame
+    }
+end
+
+-- Simple ESP for mobile (using BillboardGui instead of Drawing)
+local MobileESP = {
+    enabled = false,
+    players = {},
+    objects = {},
+    settings = {
+        showPlayers = true,
+        showObjects = true,
+        playerColor = Color3.fromRGB(255, 50, 50),
+        objectColor = Color3.fromRGB(50, 255, 50),
+        maxDistance = 500,
+        showDistance = true,
+        showName = true
+    }
+}
+
+function MobileESP:CreateBillboardESP(target, text, color)
+    if not target or not target:IsA("BasePart") then return end
+    
+    -- Remove existing ESP if any
+    local existing = target:FindFirstChild("MobileESP_Billboard")
+    if existing then existing:Destroy() end
+    
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "MobileESP_Billboard"
+    billboard.AlwaysOnTop = true
+    billboard.Size = UDim2.new(0, 200, 0, 50)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.MaxDistance = self.settings.maxDistance
+    billboard.Parent = target
+    
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Name = "ESP_Text"
+    textLabel.Size = UDim2.new(1, 0, 1, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Text = text
+    textLabel.TextColor3 = color
+    textLabel.TextSize = 14
+    textLabel.Font = Enum.Font.GothamBold
+    textLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    textLabel.TextStrokeTransparency = 0
+    textLabel.Parent = billboard
+    
+    return billboard
+end
+
+function MobileESP:UpdatePlayerESP(player)
+    if not player or not player.Character then return end
+    
+    local head = player.Character:FindFirstChild("Head")
+    if not head then return end
+    
+    local distance = (Camera.CFrame.p - head.Position).Magnitude
+    if distance > self.settings.maxDistance then
+        local existing = head:FindFirstChild("MobileESP_Billboard")
+        if existing then existing.Enabled = false end
+        return
+    end
+    
+    local text = ""
+    if self.settings.showName then
+        text = player.Name
+    end
+    if self.settings.showDistance then
+        text = text .. (text == "" and "" or "\n") .. math.floor(distance) .. " studs"
+    end
+    
+    local esp = self:CreateBillboardESP(head, text, self.settings.playerColor)
+    if esp then
+        esp.Enabled = self.enabled and self.settings.showPlayers
+        self.players[player] = esp
+    end
+end
+
+function MobileESP:UpdateObjectESP(object)
+    if not object or not object:IsA("Model") then return end
+    
+    local primary = object.PrimaryPart or object:FindFirstChild("Head") or object:FindFirstChildOfClass("BasePart")
+    if not primary then return end
+    
+    local distance = (Camera.CFrame.p - primary.Position).Magnitude
+    if distance > self.settings.maxDistance then
+        local existing = primary:FindFirstChild("MobileESP_Billboard")
+        if existing then existing.Enabled = false end
+        return
+    end
+    
+    local objectName = object.Name
+    local text = objectName
+    if self.settings.showDistance then
+        text = text .. "\n" .. math.floor(distance) .. " studs"
+    end
+    
+    local esp = self:CreateBillboardESP(primary, text, self.settings.objectColor)
+    if esp then
+        esp.Enabled = self.enabled and self.settings.showObjects
+        self.objects[object] = esp
+    end
+end
+
+function MobileESP:ScanWorkspace()
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            self:UpdatePlayerESP(player)
+        end
+    end
+    
+    -- Scan for objects (simple detection)
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj:IsA("Model") and not Players:GetPlayerFromCharacter(obj) then
+            -- Check if it's an object we want to show
+            if obj.Name:find("Tree") or obj.Name:find("Stone") or obj.Name:find("Iron") or 
+               obj.Name:find("Backpack") or obj.Name:find("Totem") then
+                self:UpdateObjectESP(obj)
+            end
+        end
+    end
+end
+
+function MobileESP:Start()
+    if self.running then return end
+    self.running = true
+    
+    -- Initial scan
+    self:ScanWorkspace()
+    
+    -- Update players when their character changes
+    Players.PlayerAdded:Connect(function(player)
+        player.CharacterAdded:Connect(function()
+            if self.enabled then
+                task.wait(0.5)
+                self:UpdatePlayerESP(player)
+            end
+        end)
+    end)
+    
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            player.CharacterAdded:Connect(function()
+                if self.enabled then
+                    task.wait(0.5)
+                    self:UpdatePlayerESP(player)
+                end
+            end)
+        end
+    end
+    
+    -- Periodic updates
+    RunService.Heartbeat:Connect(function()
+        if not self.enabled then return end
+        
+        -- Update existing ESPs
+        for player, esp in pairs(self.players) do
+            if player and player.Character then
+                local head = player.Character:FindFirstChild("Head")
+                if head and esp and esp.Parent == head then
+                    local distance = (Camera.CFrame.p - head.Position).Magnitude
+                    esp.Enabled = distance <= self.settings.maxDistance
+                    
+                    if esp.Enabled then
+                        local textLabel = esp:FindFirstChild("ESP_Text")
+                        if textLabel then
+                            local text = ""
+                            if self.settings.showName then
+                                text = player.Name
+                            end
+                            if self.settings.showDistance then
+                                text = text .. (text == "" and "" or "\n") .. math.floor(distance) .. " studs"
+                            end
+                            textLabel.Text = text
+                        end
+                    end
+                else
+                    self.players[player] = nil
+                end
+            else
+                self.players[player] = nil
+            end
+        end
+        
+        -- Rescan every 5 seconds
+        if tick() - (self.lastScan or 0) > 5 then
+            self:ScanWorkspace()
+            self.lastScan = tick()
+        end
+    end)
+end
+
+function MobileESP:SetEnabled(state)
+    self.enabled = state
+    
+    -- Update all ESPs
+    for _, esp in pairs(self.players) do
+        if esp then
+            esp.Enabled = state and self.settings.showPlayers
+        end
+    end
+    
+    for _, esp in pairs(self.objects) do
+        if esp then
+            esp.Enabled = state and self.settings.showObjects
+        end
+    end
+    
+    if state and not self.running then
+        self:Start()
+    end
+end
+
+function MobileESP:Cleanup()
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player.Character then
+            local head = player.Character:FindFirstChild("Head")
+            if head then
+                local esp = head:FindFirstChild("MobileESP_Billboard")
+                if esp then esp:Destroy() end
+            end
+        end
+    end
+    
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj:IsA("Model") then
+            local primary = obj.PrimaryPart or obj:FindFirstChildOfClass("BasePart")
+            if primary then
+                local esp = primary:FindFirstChild("MobileESP_Billboard")
+                if esp then esp:Destroy() end
+            end
+        end
+    end
+    
+    self.players = {}
+    self.objects = {}
+end
+
+-- Initialize mobile ESP and GUI
+local mobileGUI = createMobileGUI()
+MobileESP:Start()
+
+-- Create mobile-friendly controls
+local espToggle = mobileGUI.CreateToggle("ESP Включить", false, function(value)
+    MobileESP:SetEnabled(value)
+end)
+
+local playersToggle = mobileGUI.CreateToggle("Показывать игроков", true, function(value)
+    MobileESP.settings.showPlayers = value
+    MobileESP:SetEnabled(MobileESP.enabled)
+end)
+
+local objectsToggle = mobileGUI.CreateToggle("Показывать объекты", true, function(value)
+    MobileESP.settings.showObjects = value
+    MobileESP:SetEnabled(MobileESP.enabled)
+end)
+
+local distanceToggle = mobileGUI.CreateToggle("Показывать расстояние", true, function(value)
+    MobileESP.settings.showDistance = value
+    MobileESP:SetEnabled(MobileESP.enabled)
+end)
+
+local nameToggle = mobileGUI.CreateToggle("Показывать имена", true, function(value)
+    MobileESP.settings.showName = value
+    MobileESP:SetEnabled(MobileESP.enabled)
+end)
+
+local playerColorPicker = mobileGUI.CreateColorPicker("Цвет игроков", Color3.fromRGB(255, 50, 50), function(color)
+    MobileESP.settings.playerColor = color
+    MobileESP:ScanWorkspace()
+end)
+
+local objectColorPicker = mobileGUI.CreateColorPicker("Цвет объектов", Color3.fromRGB(50, 255, 50), function(color)
+    MobileESP.settings.objectColor = color
+    MobileESP:ScanWorkspace()
+end)
+
+-- Auto-cleanup when script is unloaded
+game:GetService("UserInputService").WindowFocused:Connect(function(focused)
+    if not focused then
+        MobileESP:Cleanup()
+    end
+end)
+
+-- Cleanup when leaving game
+LocalPlayer.CharacterRemoving:Connect(function()
+    MobileESP:Cleanup()
+end)
+
+print("Mobile ESP загружен! Меню в левом верхнем углу.")
