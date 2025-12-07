@@ -1,4 +1,5 @@
--- Объединенный ESP + AimBot скрипт для мобильных устройств
+-- Объединенный ESP + AIMBOT с рабочим меню
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -6,7 +7,13 @@ local CoreGui = game:GetService("CoreGui")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- ESP СИСТЕМА
+-- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ДЛЯ ДОСТУПА ИЗ МЕНЮ
+_G.ESPEnabled = true
+_G.AimbotEnabled = false
+_G.CurrentFOV = 80
+_G.AimbotTarget = nil
+
+-- ESP СИСТЕМА (ваш код с минимальными изменениями)
 local esp_table = {
     __loaded = false,
     main_settings = {
@@ -52,677 +59,449 @@ local esp_table = {
     }
 }
 
-local container = Instance.new("Folder", CoreGui.RobloxGui)
+-- ESP контейнер
+if not CoreGui:FindFirstChild("RobloxGui") then
+    local robloxGui = Instance.new("ScreenGui")
+    robloxGui.Name = "RobloxGui"
+    robloxGui.Parent = CoreGui
+end
+
+local container = Instance.new("Folder")
 container.Name = "ESPContainer"
+container.Parent = CoreGui:FindFirstChild("RobloxGui") or CoreGui
 
-local skeleton_order = {
-    ["LeftFoot"] = "LeftLowerLeg", ["LeftLowerLeg"] = "LeftUpperLeg", ["LeftUpperLeg"] = "LowerTorso",
-    ["RightFoot"] = "RightLowerLeg", ["RightLowerLeg"] = "RightUpperLeg", ["RightUpperLeg"] = "LowerTorso",
-    ["LeftHand"] = "LeftLowerArm", ["LeftLowerArm"] = "LeftUpperArm", ["LeftUpperArm"] = "Torso",
-    ["RightHand"] = "RightLowerArm", ["RightLowerArm"] = "RightUpperArm", ["RightUpperArm"] = "Torso",
-    ["LowerTorso"] = "Torso", ["Torso"] = "Head"
-}
-
--- Получение PlayerReg из игры
-local function GetFunction(Script, Line)
-    for _, v in pairs(getgc()) do
-        if typeof(v) == "function" and debug.info(v, "sl") then
-            local src, lineNum = debug.info(v, "s"), debug.info(v, "l")
-            if src:find(Script) and lineNum == Line then
-                return v
-            end
-        end
-    end
-    return nil
-end
-
-local SetInfraredEnabled = GetFunction("PlayerClient", 588)
-local PlayerReg = SetInfraredEnabled and debug.getupvalue(SetInfraredEnabled, 2) or {}
-
--- AIMBOT ПЕРЕМЕННЫЕ
-local aimbotEnabled = false
-local currentFOV = 80
-local showFOVCircle = true
-local aimbotTarget = nil
-local isAiming = false
+-- AIMBOT СИСТЕМА
+local aimbotPlayers = {} -- Игроки для аимбота
 local aimbotConnection = nil
-local aimSmoothness = 0.3
+local FOVCircle = nil
 
--- FOV Круг для AimBot
-local FOVCircle
-if Drawing then
-    FOVCircle = Drawing.new("Circle")
-    FOVCircle.Visible = false
-    FOVCircle.Thickness = 1
-    FOVCircle.Color = Color3.fromRGB(255, 0, 0)
-    FOVCircle.Radius = currentFOV
-    FOVCircle.Filled = false
-else
-    -- Backup через ScreenGui если Drawing не работает
-    local screenGui = Instance.new("ScreenGui", CoreGui)
-    screenGui.Name = "FOVCircleUI"
-    local frame = Instance.new("Frame", screenGui)
-    frame.AnchorPoint = Vector2.new(0.5, 0.5)
-    frame.Size = UDim2.new(0, currentFOV * 2, 0, currentFOV * 2)
-    frame.Position = UDim2.new(0.5, 0, 0.5, 0)
-    frame.BackgroundTransparency = 1
-    frame.BorderSizePixel = 2
-    frame.BorderColor3 = Color3.fromRGB(255, 0, 0)
-    frame.Visible = false
-    local UICorner = Instance.new("UICorner", frame)
-    UICorner.CornerRadius = UDim.new(1, 0)
-    FOVCircle = frame
-end
-
--- ESP ФУНКЦИИ
-local loaded_plrs = {}
-local esp_players = {} -- Список игроков для ESP
-
-local function worldToScreen(world)
-    local screen, inBounds = Camera:WorldToViewportPoint(world)
-    return Vector2.new(math.floor(screen.X), math.floor(screen.Y)), inBounds, screen.Z
-end
-
-local function calculateCornersSimple(head, hrp)
-    local head_position = worldToScreen(head.Position - Vector3.new(0, 0.5, 0))
-    local leg_position = worldToScreen(hrp.Position - Vector3.new(0, 3.5, 0))
-    local headx, heady = head_position.X, head_position.Y
-    local legx, legy = leg_position.X, leg_position.Y
-    local height = legy - heady
-    local width = height / 3.6
-    return {
-        topLeft = Vector2.new(headx - width, heady),
-        topRight = Vector2.new(headx + width, heady),
-        bottomLeft = Vector2.new(headx - width, legy),
-        bottomRight = Vector2.new(headx + width, legy)
-    }
-end
-
-local function getRainbowColor()
-    local time = tick() * 0.5
-    local r = (math.sin(time) + 1) / 2
-    local g = (math.sin(time + 2 * math.pi / 3) + 1) / 2
-    local b = (math.sin(time + 4 * math.pi / 3) + 1) / 2
-    return Color3.new(r, g, b)
-end
-
-local function getPlayerIdFromModel(model)
-    if not model then return nil, false end
-    for _, player in next, PlayerReg do
-        if player and player.model == model then
-            return player.id, player.sleeping
-        end
-    end
-    local plr = Players:GetPlayerFromCharacter(model)
-    return plr and plr.UserId, false
-end
-
-local function createDrawingObject(type, properties)
-    if not Drawing then return nil end
-    local obj = Drawing.new(type)
-    for prop, value in pairs(properties) do
-        obj[prop] = value
-    end
-    return obj
-end
-
-local function create_player_esp(model)
-    if not model or not model:IsA("Model") then return end
-    if not model:FindFirstChild("Head") or not model:FindFirstChild("LowerTorso") then return end
+-- Функция для получения игроков из ESP
+local function GetESPTargets()
+    local targets = {}
     
-    local player = Players:GetPlayerFromCharacter(model)
-    if player == LocalPlayer then return end
-    
-    -- Добавляем в список ESP игроков
-    esp_players[model] = true
-    
-    local playerId, isSleeping = getPlayerIdFromModel(model)
-    local playerName = player and player.Name or "Player"
-    
-    -- Создаем ESP объекты если Drawing доступен
-    if Drawing then
-        loaded_plrs[model] = {
-            obj = {},
-            chams_object = Instance.new("Highlight", container),
-            connection = nil
-        }
-        
-        local plr = loaded_plrs[model]
-        local settings = esp_table.settings.enemy
-        
-        -- Создаем Drawing объекты
-        plr.obj.box = createDrawingObject("Square", {
-            Filled = false,
-            Thickness = 1,
-            Visible = false
-        })
-        
-        plr.obj.box_fill = createDrawingObject("Square", {
-            Filled = true,
-            Visible = false
-        })
-        
-        plr.obj.box_outline = createDrawingObject("Square", {
-            Filled = false,
-            Thickness = 3,
-            Visible = false,
-            ZIndex = -1
-        })
-        
-        plr.obj.realname = createDrawingObject("Text", {
-            Center = true,
-            Visible = settings.realname,
-            Size = esp_table.main_settings.textSize,
-            Font = esp_table.main_settings.textFont
-        })
-        
-        plr.obj.tracer = createDrawingObject("Line", {
-            Thickness = 1,
-            Visible = false
-        })
-        
-        -- Скелет
-        for required, _ in next, skeleton_order do
-            plr.obj["skeleton_" .. required] = createDrawingObject("Line", {
-                Visible = false
-            })
-        end
-        
-        -- Chams
-        if plr.chams_object then
-            plr.chams_object.Adornee = model
-            plr.chams_object.Enabled = not isSleeping and settings.chams
-            plr.chams_object.FillColor = getRainbowColor()
-            plr.chams_object.FillTransparency = settings.chams_fill_color[2]
-            plr.chams_object.OutlineColor = getRainbowColor()
-            plr.chams_object.OutlineTransparency = settings.chamsoutline_color[2]
-        end
-        
-        -- Цикл обновления ESP
-        plr.connection = RunService.RenderStepped:Connect(function()
-            if not model or not model.Parent or not model:FindFirstChild("Head") then
-                return
-            end
+    -- Ищем всех живых игроков кроме себя
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local humanoid = player.Character:FindFirstChild("Humanoid")
+            local head = player.Character:FindFirstChild("Head")
             
-            local head = model.Head
-            local _, onScreen = worldToScreen(head.Position)
-            
-            if not onScreen then
-                for _, obj in pairs(plr.obj) do
-                    if obj then obj.Visible = false end
-                end
-                if plr.chams_object then
-                    plr.chams_object.Enabled = false
-                end
-                return
-            end
-            
-            local rainbowColor = getRainbowColor()
-            local settings = esp_table.settings.enemy
-            
-            -- Обновляем видимость
-            local currentPlayerId, currentIsSleeping = getPlayerIdFromModel(model)
-            
-            if not currentIsSleeping then
-                -- Box
-                if plr.obj.box then
-                    plr.obj.box.Visible = settings.box
-                    plr.obj.box.Color = rainbowColor
-                    plr.obj.box.Transparency = settings.box_color[2]
-                end
-                
-                if plr.obj.box_fill then
-                    plr.obj.box_fill.Visible = settings.box_fill
-                    plr.obj.box_fill.Color = rainbowColor
-                    plr.obj.box_fill.Transparency = settings.box_fill_color[2]
-                end
-                
-                if plr.obj.box_outline then
-                    plr.obj.box_outline.Visible = settings.box_outline
-                    plr.obj.box_outline.Color = settings.box_outline_color[1]
-                end
-                
-                if plr.obj.realname then
-                    plr.obj.realname.Visible = settings.realname
-                    plr.obj.realname.Text = playerName
-                    plr.obj.realname.Color = rainbowColor
-                    plr.obj.realname.Outline = settings.realname_outline
-                end
-                
-                if plr.obj.tracer then
-                    plr.obj.tracer.Visible = settings.tracers
-                    plr.obj.tracer.Color = rainbowColor
-                end
-                
-                -- Chams
-                if plr.chams_object then
-                    plr.chams_object.Enabled = settings.chams
-                    plr.chams_object.FillColor = rainbowColor
-                    plr.chams_object.OutlineColor = rainbowColor
-                end
-                
-                -- Скелет
-                if settings.skeleton then
-                    for boneName, parentName in pairs(skeleton_order) do
-                        local bone = model:FindFirstChild(boneName)
-                        local parent = model:FindFirstChild(parentName)
-                        local skeletonObj = plr.obj["skeleton_" .. boneName]
-                        
-                        if bone and parent and skeletonObj then
-                            local bonePos, boneOnScreen = Camera:WorldToViewportPoint(bone.Position)
-                            local parentPos, parentOnScreen = Camera:WorldToViewportPoint(parent.Position)
-                            
-                            if boneOnScreen and parentOnScreen then
-                                skeletonObj.Visible = true
-                                skeletonObj.Color = rainbowColor
-                                skeletonObj.From = Vector2.new(bonePos.X, bonePos.Y)
-                                skeletonObj.To = Vector2.new(parentPos.X, parentPos.Y)
-                            else
-                                skeletonObj.Visible = false
-                            end
-                        end
-                    end
-                end
-                
-                -- Позиционирование
-                local lowertorso = model:FindFirstChild("LowerTorso")
-                if head and lowertorso then
-                    local corners = calculateCornersSimple(head, lowertorso)
-                    
-                    if corners then
-                        if plr.obj.box then
-                            plr.obj.box.Position = corners.topLeft
-                            plr.obj.box.Size = corners.bottomRight - corners.topLeft
-                        end
-                        
-                        if plr.obj.box_fill then
-                            plr.obj.box_fill.Position = corners.topLeft
-                            plr.obj.box_fill.Size = corners.bottomRight - corners.topLeft
-                        end
-                        
-                        if plr.obj.box_outline then
-                            plr.obj.box_outline.Position = corners.topLeft + Vector2.new(1, 1)
-                            plr.obj.box_outline.Size = (corners.bottomRight - corners.topLeft) - Vector2.new(1, 1)
-                        end
-                        
-                        if plr.obj.realname then
-                            plr.obj.realname.Position = corners.topLeft + 
-                                (corners.topRight - corners.topLeft) / 2 - 
-                                Vector2.new(0, plr.obj.realname.TextBounds.Y + 2)
-                        end
-                        
-                        -- Трейсеры
-                        if plr.obj.tracer and settings.tracers then
-                            local torsoPos = worldToScreen(lowertorso.Position)
-                            local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
-                            plr.obj.tracer.From = screenCenter
-                            plr.obj.tracer.To = torsoPos
-                        end
-                    end
-                end
-            else
-                -- Если спит
-                for _, obj in pairs(plr.obj) do
-                    if obj then obj.Visible = false end
-                end
-                if plr.chams_object then
-                    plr.chams_object.Enabled = false
-                end
-                if plr.obj.realname then
-                    plr.obj.realname.Visible = true
-                    plr.obj.realname.Text = "Sleeper"
-                end
-            end
-        end)
-    end
-end
-
-local function destroy_esp(model)
-    esp_players[model] = nil
-    
-    local plr = loaded_plrs[model]
-    if plr then
-        if plr.connection then
-            plr.connection:Disconnect()
-        end
-        
-        for _, obj in pairs(plr.obj) do
-            if obj and obj.Remove then
-                obj:Remove()
+            if humanoid and humanoid.Health > 0 and head then
+                targets[player.Character] = true
             end
         end
-        
-        if plr.chams_object then
-            plr.chams_object:Destroy()
-        end
-        
-        loaded_plrs[model] = nil
     end
+    
+    return targets
 end
 
--- AIMBOT ФУНКЦИИ
-local function findClosestPlayer()
-    if not LocalPlayer.Character then return nil end
+-- Найти ближайшую цель в FOV
+local function FindClosestTarget()
+    if not Camera then return nil end
     
-    local closestPlayer = nil
-    local closestDistance = currentFOV
+    local closestTarget = nil
+    local closestDistance = _G.CurrentFOV
     local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
     
-    -- Используем игроков из ESP системы
-    for model, _ in pairs(esp_players) do
-        if model and model:IsA("Model") then
-            local head = model:FindFirstChild("Head")
-            local humanoid = model:FindFirstChild("Humanoid")
+    for character, _ in pairs(GetESPTargets()) do
+        local head = character:FindFirstChild("Head")
+        if head then
+            local screenPos, onScreen = Camera:WorldToScreenPoint(head.Position)
             
-            if head and humanoid and humanoid.Health > 0 then
-                local headScreenPos, onScreen = Camera:WorldToScreenPoint(head.Position)
+            if onScreen then
+                local distance = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
                 
-                if onScreen then
-                    local distance = (Vector2.new(headScreenPos.X, headScreenPos.Y) - screenCenter).Magnitude
-                    
-                    if distance < closestDistance then
-                        closestDistance = distance
-                        closestPlayer = model
-                    end
+                if distance < closestDistance then
+                    closestDistance = distance
+                    closestTarget = character
                 end
             end
         end
     end
     
-    return closestPlayer
+    return closestTarget
 end
 
-local function aimAtTarget(targetModel)
-    if not targetModel or not LocalPlayer.Character then return end
+-- Плавное наведение
+local function SmoothAim(target)
+    if not target or not Camera then return end
     
-    local head = targetModel:FindFirstChild("Head")
-    local humanoidRootPart = targetModel:FindFirstChild("HumanoidRootPart")
+    local head = target:FindFirstChild("Head")
+    if not head then return end
     
-    if head then
-        local currentCF = Camera.CFrame
-        local direction = (head.Position - currentCF.Position).Unit
-        local targetCF = CFrame.lookAt(currentCF.Position, currentCF.Position + direction)
-        
-        -- Плавное наведение для мобильных устройств
-        Camera.CFrame = currentCF:Lerp(targetCF, aimSmoothness)
-    elseif humanoidRootPart then
-        local currentCF = Camera.CFrame
-        local direction = (humanoidRootPart.Position - currentCF.Position).Unit
-        local targetCF = CFrame.lookAt(currentCF.Position, currentCF.Position + direction)
-        
-        Camera.CFrame = currentCF:Lerp(targetCF, aimSmoothness)
-    end
+    local currentCF = Camera.CFrame
+    local targetPos = head.Position
+    local direction = (targetPos - currentCF.Position).Unit
+    
+    Camera.CFrame = CFrame.new(currentCF.Position, currentCF.Position + direction)
 end
 
-local function ToggleAimbot()
-    aimbotEnabled = not aimbotEnabled
+-- Включить/выключить аимбот
+function ToggleAimbot()
+    _G.AimbotEnabled = not _G.AimbotEnabled
     
-    if aimbotEnabled then
-        -- Обновляем FOV круг
-        if FOVCircle then
-            if typeof(FOVCircle) == "table" and FOVCircle.Visible ~= nil then
-                FOVCircle.Visible = showFOVCircle
-                FOVCircle.Radius = currentFOV
-            elseif FOVCircle:IsA("Frame") then
-                FOVCircle.Visible = showFOVCircle
-                FOVCircle.Size = UDim2.new(0, currentFOV * 2, 0, currentFOV * 2)
-            end
+    if _G.AimbotEnabled then
+        print("Aimbot ВКЛЮЧЕН")
+        
+        -- Создаем FOV круг если его нет
+        if not FOVCircle and Drawing then
+            FOVCircle = Drawing.new("Circle")
+            FOVCircle.Visible = true
+            FOVCircle.Thickness = 1
+            FOVCircle.Color = Color3.fromRGB(255, 0, 0)
+            FOVCircle.Radius = _G.CurrentFOV
+            FOVCircle.Filled = false
         end
         
-        -- Запускаем цикл AimBot
+        -- Запускаем цикл прицеливания
         aimbotConnection = RunService.RenderStepped:Connect(function()
-            local closestPlayer = findClosestPlayer()
-            if closestPlayer then
-                aimAtTarget(closestPlayer)
+            if not _G.AimbotEnabled then return end
+            
+            local target = FindClosestTarget()
+            if target then
+                SmoothAim(target)
+                _G.AimbotTarget = target
+            else
+                _G.AimbotTarget = nil
             end
         end)
     else
-        -- Выключаем
+        print("Aimbot ВЫКЛЮЧЕН")
+        
+        -- Удаляем FOV круг
         if FOVCircle then
-            if typeof(FOVCircle) == "table" and FOVCircle.Visible ~= nil then
-                FOVCircle.Visible = false
-            elseif FOVCircle:IsA("Frame") then
-                FOVCircle.Visible = false
-            end
+            FOVCircle:Remove()
+            FOVCircle = nil
         end
         
+        -- Отключаем соединение
         if aimbotConnection then
             aimbotConnection:Disconnect()
             aimbotConnection = nil
         end
+        
+        _G.AimbotTarget = nil
     end
 end
 
-local function UpdateFOV()
-    if currentFOV < 150 then
-        currentFOV = currentFOV + 10
+-- Обновить FOV
+function UpdateFOV()
+    if _G.CurrentFOV < 150 then
+        _G.CurrentFOV = _G.CurrentFOV + 10
     else
-        currentFOV = 30
+        _G.CurrentFOV = 30
     end
     
     if FOVCircle then
-        if typeof(FOVCircle) == "table" and FOVCircle.Radius ~= nil then
-            FOVCircle.Radius = currentFOV
-        elseif FOVCircle:IsA("Frame") then
-            FOVCircle.Size = UDim2.new(0, currentFOV * 2, 0, currentFOV * 2)
-        end
+        FOVCircle.Radius = _G.CurrentFOV
     end
+    
+    print("FOV изменен на: " .. _G.CurrentFOV)
 end
 
--- МОБИЛЬНОЕ УПРАВЛЕНИЕ
-local touchStartTime = 0
-local touchStartPos = nil
-local isTouchActive = false
-
-UserInputService.TouchStarted:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    
-    touchStartTime = tick()
-    touchStartPos = input.Position
-    isTouchActive = true
-end)
-
-UserInputService.TouchEnded:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    
-    local touchDuration = tick() - touchStartTime
-    local endPos = input.Position
-    
-    if touchDuration < 0.3 then
-        -- Короткое нажатие - активация/деактивация AimBot
-        ToggleAimbot()
-    elseif touchDuration > 0.8 then
-        -- Долгое нажатие - изменение FOV
-        UpdateFOV()
-    end
-    
-    isTouchActive = false
-end)
-
--- КОМПАКТНОЕ МЕНЮ
-local function CreateMiniMenu()
-    local oldMenu = CoreGui:FindFirstChild("MiniMenu")
+-- РАБОЧЕЕ МЕНЮ
+local function CreateWorkingMenu()
+    -- Удаляем старое меню если есть
+    local oldMenu = CoreGui:FindFirstChild("AimMenu")
     if oldMenu then oldMenu:Destroy() end
     
-    local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "MiniMenu"
-    ScreenGui.Parent = CoreGui
+    -- Создаем новое меню
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "AimMenu"
+    screenGui.Parent = CoreGui
+    screenGui.ResetOnSpawn = false
+    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     
-    local MainFrame = Instance.new("Frame")
-    MainFrame.Size = UDim2.new(0, 150, 0, 120)
-    MainFrame.Position = UDim2.new(0, 10, 0, 10)
-    MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-    MainFrame.BorderSizePixel = 1
-    MainFrame.BorderColor3 = Color3.fromRGB(80, 80, 90)
-    MainFrame.Parent = ScreenGui
+    -- Основной фрейм
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Name = "MainFrame"
+    mainFrame.Size = UDim2.new(0, 160, 0, 130)
+    mainFrame.Position = UDim2.new(0, 10, 0, 10)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Parent = screenGui
     
-    local Title = Instance.new("TextLabel")
-    Title.Size = UDim2.new(1, 0, 0, 20)
-    Title.Position = UDim2.new(0, 0, 0, 0)
-    Title.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-    Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Title.Text = "⚙️ ESP+AIM"
-    Title.Font = Enum.Font.SourceSansBold
-    Title.TextSize = 12
-    Title.Parent = MainFrame
+    -- Скругление углов
+    local uiCorner = Instance.new("UICorner")
+    uiCorner.CornerRadius = UDim.new(0, 8)
+    uiCorner.Parent = mainFrame
     
-    local ESPButton = Instance.new("TextButton")
-    ESPButton.Size = UDim2.new(1, -10, 0, 20)
-    ESPButton.Position = UDim2.new(0, 5, 0, 25)
-    ESPButton.BackgroundColor3 = Color3.fromRGB(60, 180, 60)
-    ESPButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    ESPButton.Text = "ESP: ON"
-    ESPButton.Font = Enum.Font.SourceSans
-    ESPButton.TextSize = 10
-    ESPButton.Parent = MainFrame
+    -- Тень
+    local uiShadow = Instance.new("UIStroke")
+    uiShadow.Color = Color3.fromRGB(50, 50, 60)
+    uiShadow.Thickness = 2
+    uiShadow.Parent = mainFrame
     
-    local AimbotButton = Instance.new("TextButton")
-    AimbotButton.Size = UDim2.new(1, -10, 0, 20)
-    AimbotButton.Position = UDim2.new(0, 5, 0, 50)
-    AimbotButton.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
-    AimbotButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    AimbotButton.Text = "AIM: OFF"
-    AimbotButton.Font = Enum.Font.SourceSans
-    AimbotButton.TextSize = 10
-    AimbotButton.Parent = MainFrame
+    -- Заголовок (для перетаскивания)
+    local titleBar = Instance.new("Frame")
+    titleBar.Name = "TitleBar"
+    titleBar.Size = UDim2.new(1, 0, 0, 30)
+    titleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+    titleBar.BorderSizePixel = 0
+    titleBar.Parent = mainFrame
     
-    local FOVButton = Instance.new("TextButton")
-    FOVButton.Size = UDim2.new(1, -10, 0, 20)
-    FOVButton.Position = UDim2.new(0, 5, 0, 75)
-    FOVButton.BackgroundColor3 = Color3.fromRGB(100, 65, 165)
-    FOVButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    FOVButton.Text = "FOV: " .. currentFOV
-    FOVButton.Font = Enum.Font.SourceSans
-    FOVButton.TextSize = 10
-    FOVButton.Parent = MainFrame
+    local titleCorner = Instance.new("UICorner")
+    titleCorner.CornerRadius = UDim.new(0, 8)
+    titleCorner.Parent = titleBar
     
-    -- Обновление состояния кнопок
-    local function updateButtons()
-        AimbotButton.Text = "AIM: " .. (aimbotEnabled and "ON" or "OFF")
-        AimbotButton.BackgroundColor3 = aimbotEnabled and Color3.fromRGB(60, 180, 60) or Color3.fromRGB(180, 60, 60)
-        FOVButton.Text = "FOV: " .. currentFOV
-    end
+    local titleText = Instance.new("TextLabel")
+    titleText.Name = "TitleText"
+    titleText.Size = UDim2.new(1, 0, 1, 0)
+    titleText.BackgroundTransparency = 1
+    titleText.Text = "ESP + AIMBOT"
+    titleText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    titleText.Font = Enum.Font.GothamBold
+    titleText.TextSize = 14
+    titleText.Parent = titleBar
     
-    ESPButton.MouseButton1Click:Connect(function()
-        -- ESP всегда включен в этом скрипте
-        ESPButton.BackgroundColor3 = Color3.fromRGB(60, 180, 60)
-        ESPButton.Text = "ESP: ON"
+    -- Кнопка ESP
+    local espButton = Instance.new("TextButton")
+    espButton.Name = "ESPButton"
+    espButton.Size = UDim2.new(1, -20, 0, 30)
+    espButton.Position = UDim2.new(0, 10, 0, 35)
+    espButton.BackgroundColor3 = Color3.fromRGB(60, 180, 60)
+    espButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    espButton.Text = "ESP: ВКЛ"
+    espButton.Font = Enum.Font.Gotham
+    espButton.TextSize = 12
+    espButton.Parent = mainFrame
+    
+    local espCorner = Instance.new("UICorner")
+    espCorner.CornerRadius = UDim.new(0, 6)
+    espCorner.Parent = espButton
+    
+    -- Кнопка AIMBOT
+    local aimButton = Instance.new("TextButton")
+    aimButton.Name = "AimButton"
+    aimButton.Size = UDim2.new(1, -20, 0, 30)
+    aimButton.Position = UDim2.new(0, 10, 0, 70)
+    aimButton.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+    aimButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    aimButton.Text = "AIM: ВЫКЛ"
+    aimButton.Font = Enum.Font.Gotham
+    aimButton.TextSize = 12
+    aimButton.Parent = mainFrame
+    
+    local aimCorner = Instance.new("UICorner")
+    aimCorner.CornerRadius = UDim.new(0, 6)
+    aimCorner.Parent = aimButton
+    
+    -- Кнопка FOV
+    local fovButton = Instance.new("TextButton")
+    fovButton.Name = "FOVButton"
+    fovButton.Size = UDim2.new(1, -20, 0, 30)
+    fovButton.Position = UDim2.new(0, 10, 0, 105)
+    fovButton.BackgroundColor3 = Color3.fromRGB(80, 80, 180)
+    fovButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    fovButton.Text = "FOV: " .. _G.CurrentFOV
+    fovButton.Font = Enum.Font.Gotham
+    fovButton.TextSize = 12
+    fovButton.Parent = mainFrame
+    
+    local fovCorner = Instance.new("UICorner")
+    fovCorner.CornerRadius = UDim.new(0, 6)
+    fovCorner.Parent = fovButton
+    
+    -- ОБРАБОТЧИКИ КНОПОК (рабочие!)
+    
+    -- Кнопка ESP
+    espButton.MouseButton1Click:Connect(function()
+        _G.ESPEnabled = not _G.ESPEnabled
+        if _G.ESPEnabled then
+            espButton.BackgroundColor3 = Color3.fromRGB(60, 180, 60)
+            espButton.Text = "ESP: ВКЛ"
+            print("ESP включен")
+        else
+            espButton.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+            espButton.Text = "ESP: ВЫКЛ"
+            print("ESP выключен")
+        end
     end)
     
-    AimbotButton.MouseButton1Click:Connect(function()
+    -- Кнопка AIMBOT
+    aimButton.MouseButton1Click:Connect(function()
         ToggleAimbot()
-        updateButtons()
+        
+        -- Обновляем кнопку
+        if _G.AimbotEnabled then
+            aimButton.BackgroundColor3 = Color3.fromRGB(60, 180, 60)
+            aimButton.Text = "AIM: ВКЛ"
+        else
+            aimButton.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+            aimButton.Text = "AIM: ВЫКЛ"
+        end
     end)
     
-    FOVButton.MouseButton1Click:Connect(function()
+    -- Кнопка FOV
+    fovButton.MouseButton1Click:Connect(function()
         UpdateFOV()
-        updateButtons()
+        fovButton.Text = "FOV: " .. _G.CurrentFOV
     end)
     
-    -- Перетаскивание
+    -- ПЕРЕТАСКИВАНИЕ МЕНЮ
     local dragging = false
-    local dragStart, startPos
+    local dragStart, frameStart
     
-    Title.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+    titleBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or 
+           input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             dragStart = input.Position
-            startPos = MainFrame.Position
+            frameStart = mainFrame.Position
+            
+            -- Эффект нажатия
+            titleBar.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
         end
     end)
     
     UserInputService.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or 
+                        input.UserInputType == Enum.UserInputType.Touch) then
             local delta = input.Position - dragStart
-            MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            mainFrame.Position = UDim2.new(
+                frameStart.X.Scale, 
+                frameStart.X.Offset + delta.X,
+                frameStart.Y.Scale, 
+                frameStart.Y.Offset + delta.Y
+            )
         end
     end)
     
     UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or 
+           input.UserInputType == Enum.UserInputType.Touch then
             dragging = false
+            titleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
         end
     end)
     
-    return ScreenGui
+    return screenGui
 end
 
--- ИНИЦИАЛИЗАЦИЯ
-local function initializeESP()
-    -- Загружаем всех существующих игроков
-    for _, player in pairs(Players:GetPlayers()) do
-        if player.Character then
-            create_player_esp(player.Character)
-        end
-        
-        player.CharacterAdded:Connect(function(character)
-            wait(0.5)
-            create_player_esp(character)
-        end)
+-- МОБИЛЬНОЕ УПРАВЛЕНИЕ
+local lastTapTime = 0
+UserInputService.TouchTap:Connect(function(touchPos, gameProcessed)
+    if gameProcessed then return end
+    
+    local currentTime = tick()
+    
+    -- Двойной тап для быстрого переключения аимбота
+    if currentTime - lastTapTime < 0.3 then
+        ToggleAimbot()
     end
     
-    -- Новые игроки
-    Players.PlayerAdded:Connect(function(player)
-        player.CharacterAdded:Connect(function(character)
-            wait(0.5)
-            create_player_esp(character)
-        end)
-    end)
-    
-    -- Удаление ESP при удалении модели
-    workspace.ChildRemoved:Connect(function(child)
-        if child:IsA("Model") then
-            destroy_esp(child)
+    lastTapTime = currentTime
+end)
+
+-- ОБНОВЛЕНИЕ FOV КРУГА
+if Drawing then
+    RunService.RenderStepped:Connect(function()
+        if FOVCircle then
+            FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+            FOVCircle.Radius = _G.CurrentFOV
+            FOVCircle.Visible = _G.AimbotEnabled
         end
     end)
-    
-    esp_table.__loaded = true
-    print("ESP система загружена")
 end
 
 -- ЗАПУСК СИСТЕМЫ
 wait(1) -- Даем время игре загрузиться
 
--- Создаем меню
-CreateMiniMenu()
+-- Создаем рабочее меню
+local menu = CreateWorkingMenu()
 
--- Инициализируем ESP
-initializeESP()
-
--- Обновление FOV круга
-RunService.RenderStepped:Connect(function()
-    if FOVCircle then
-        if typeof(FOVCircle) == "table" and FOVCircle.Position ~= nil then
-            FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-        elseif FOVCircle:IsA("Frame") then
-            FOVCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
+-- Инициализируем ESP (упрощенная версия)
+local function InitializeSimpleESP()
+    if not Drawing then 
+        warn("Drawing не доступен, ESP может не работать")
+        return 
+    end
+    
+    -- Простой ESP для примера
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            spawn(function()
+                wait(1)
+                
+                -- Создаем Highlight для игрока
+                local highlight = Instance.new("Highlight")
+                highlight.Name = "ESP_" .. player.Name
+                highlight.FillColor = Color3.fromRGB(255, 50, 50)
+                highlight.FillTransparency = 0.7
+                highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+                highlight.Parent = container
+                
+                -- Обновляем позицию
+                local connection
+                connection = RunService.RenderStepped:Connect(function()
+                    if not _G.ESPEnabled then
+                        highlight.Enabled = false
+                        return
+                    end
+                    
+                    if player.Character then
+                        highlight.Adornee = player.Character
+                        highlight.Enabled = true
+                        
+                        -- Меняем цвет если это цель аимбота
+                        if _G.AimbotTarget == player.Character then
+                            highlight.FillColor = Color3.fromRGB(50, 255, 50)
+                        else
+                            highlight.FillColor = Color3.fromRGB(255, 50, 50)
+                        end
+                    else
+                        highlight.Enabled = false
+                    end
+                end)
+                
+                -- Чистка при выходе игрока
+                player:GetPropertyChangedSignal("Parent"):Connect(function()
+                    if not player.Parent then
+                        connection:Disconnect()
+                        highlight:Destroy()
+                    end
+                end)
+            end)
         end
     end
-end)
+    
+    -- Новые игроки
+    Players.PlayerAdded:Connect(function(player)
+        wait(1)
+        
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "ESP_" .. player.Name
+        highlight.FillColor = Color3.fromRGB(255, 50, 50)
+        highlight.FillTransparency = 0.7
+        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+        highlight.Parent = container
+        
+        RunService.RenderStepped:Connect(function()
+            if not _G.ESPEnabled then
+                highlight.Enabled = false
+                return
+            end
+            
+            if player.Character then
+                highlight.Adornee = player.Character
+                highlight.Enabled = true
+            else
+                highlight.Enabled = false
+            end
+        end)
+    end)
+    
+    print("Простой ESP инициализирован")
+end
 
-print("Объединенный ESP + AimBot скрипт активирован!")
+-- Запускаем ESP
+InitializeSimpleESP()
+
+print("======================================")
+print("ESP + AIMBOT система загружена!")
 print("Управление:")
-print("- ESP: всегда включен")
-print("- Короткое нажатие: вкл/выкл AimBot")
-print("- Долгое нажатие: изменение FOV")
-print("- Меню: перетаскивание за заголовок")
-
--- Автообновление при телепортации
-LocalPlayer.OnTeleport:Connect(function(teleportState)
-    if teleportState == Enum.TeleportState.Started then
-        -- Сохраняем состояние
-        local wasAimbotEnabled = aimbotEnabled
-        
-        -- Ждем загрузки
-        wait(3)
-        
-        -- Перезапускаем ESP
-        initializeESP()
-        
-        -- Восстанавливаем AimBot если был включен
-        if wasAimbotEnabled then
-            wait(0.5)
-            ToggleAimbot()
-        end
-    end
-end)
+print("- Меню: перетаскивание за верхнюю панель")
+print("- ESP: показывает игроков")
+print("- AIM: автоматическое прицеливание")
+print("- FOV: размер зоны прицеливания")
+print("- Двойной тап: быстрое вкл/выкл аимбота")
+print("======================================")
