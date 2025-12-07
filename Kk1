@@ -400,16 +400,15 @@ end
 esp_table.load()
 
 -- ============================================
--- AIMBOT (РАБОТАЕТ С ТЕМИ ЖЕ КУКЛАМИ, ЧТО И ESP)
+-- ПРОСТОЙ AIMBOT КОТОРЫЙ РАБОТАЕТ
 -- ============================================
 
 local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
--- AIMBOT ПЕРЕМЕННЫЕ
+-- ПЕРЕМЕННЫЕ AIMBOT
 local aimbotEnabled = false
 local aimbotFOV = 100
-local aimbotSmoothness = 0.15
 local aimbotConnection = nil
 local fovCircle = nil
 
@@ -418,32 +417,29 @@ if Drawing then
     fovCircle = Drawing.new("Circle")
     fovCircle.Visible = false
     fovCircle.Thickness = 1
-    fovCircle.Color = Color3.fromRGB(255, 50, 50)
+    fovCircle.Color = Color3.fromRGB(255, 0, 0)
     fovCircle.Radius = aimbotFOV
     fovCircle.Filled = false
-    fovCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
 end
 
--- НАЙТИ БЛИЖАЙШУЮ КУКЛУ ИЗ PlayerReg
-local function findClosestDoll()
+-- ФУНКЦИЯ НАЙТИ БЛИЖАЙШУЮ ЦЕЛЬ (ПРОСТАЯ)
+local function findClosestTarget()
     if not Camera then return nil end
     
-    local closestDoll = nil
+    local closestTarget = nil
     local closestDistance = aimbotFOV
     local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
     
-    -- ИЩЕМ В ТОМ ЖЕ PlayerReg, ЧТО И ESP
+    -- ПРОСТО ИЩЕМ ЛЮБОГО ИГРОКА С ГОЛОВОЙ
     for _, playerData in pairs(PlayerReg) do
-        if playerData and playerData.type == "Player" then
-            local doll = playerData.model -- КУКЛА
-            local isSleeping = playerData.sleeping
+        if playerData and playerData.model then
+            local doll = playerData.model
             
-            -- ТЕ ЖЕ ПРОВЕРКИ, ЧТО И В ESP
-            if not isSleeping and doll and doll:IsA("Model") then
+            if doll and doll:IsA("Model") then
                 local head = doll:FindFirstChild("Head")
-                local humanoid = doll:FindFirstChild("Humanoid")
                 
-                if head and humanoid and humanoid.Health > 0 then
+                -- ПРОСТО ПРОВЕРЯЕМ ЕСТЬ ЛИ ГОЛОВА
+                if head then
                     local screenPos, onScreen = Camera:WorldToScreenPoint(head.Position)
                     
                     if onScreen then
@@ -451,7 +447,7 @@ local function findClosestDoll()
                         
                         if distance < closestDistance then
                             closestDistance = distance
-                            closestDoll = doll
+                            closestTarget = doll
                         end
                     end
                 end
@@ -459,68 +455,68 @@ local function findClosestDoll()
         end
     end
     
-    return closestDoll
+    return closestTarget
 end
 
--- ПЛАВНОЕ НАВЕДЕНИЕ НА КУКЛУ
-local function aimAtDoll(doll)
-    if not doll or not Camera then return end
+-- ПРОСТОЕ НАВЕДЕНИЕ
+local function aimAtTarget(target)
+    if not target or not Camera then return end
     
-    local head = doll:FindFirstChild("Head")
+    local head = target:FindFirstChild("Head")
     if not head then return end
     
-    local currentCF = Camera.CFrame
-    local targetPos = head.Position
-    local direction = (targetPos - currentCF.Position).Unit
-    
-    -- ПЛАВНОЕ НАВЕДЕНИЕ
-    Camera.CFrame = currentCF:Lerp(
-        CFrame.new(currentCF.Position, currentCF.Position + direction),
-        aimbotSmoothness
-    )
+    -- ПРОСТО ЦЕЛИМСЯ В ГОЛОВУ
+    Camera.CFrame = CFrame.new(Camera.CFrame.Position, head.Position)
 end
 
--- ВКЛЮЧИТЬ/ВЫКЛЮЧИТЬ AIMBOT
-local function toggleAimbot()
-    aimbotEnabled = not aimbotEnabled
+-- ВКЛЮЧИТЬ AIMBOT (АВТОМАТИЧЕСКИ)
+local function enableAimbot()
+    aimbotEnabled = true
     
+    if fovCircle then
+        fovCircle.Visible = true
+    end
+    
+    -- ЗАПУСКАЕМ ЦИКЛ
+    aimbotConnection = RunService.RenderStepped:Connect(function()
+        local target = findClosestTarget()
+        if target then
+            aimAtTarget(target)
+        end
+    end)
+    
+    print("AIMBOT ВКЛЮЧЕН")
+end
+
+-- ВЫКЛЮЧИТЬ AIMBOT
+local function disableAimbot()
+    aimbotEnabled = false
+    
+    if fovCircle then
+        fovCircle.Visible = false
+    end
+    
+    if aimbotConnection then
+        aimbotConnection:Disconnect()
+        aimbotConnection = nil
+    end
+    
+    print("AIMBOT ВЫКЛЮЧЕН")
+end
+
+-- ПЕРЕКЛЮЧИТЬ AIMBOT
+local function toggleAimbot()
     if aimbotEnabled then
-        print("🎯 AimBot ВКЛЮЧЕН")
-        
-        -- ПОКАЗАТЬ FOV КРУГ
-        if fovCircle then
-            fovCircle.Visible = true
-        end
-        
-        -- ЗАПУСТИТЬ ЦИКЛ ПРИЦЕЛИВАНИЯ
-        aimbotConnection = RunService.RenderStepped:Connect(function()
-            if not aimbotEnabled then return end
-            
-            local targetDoll = findClosestDoll()
-            if targetDoll then
-                aimAtDoll(targetDoll)
-            end
-        end)
+        disableAimbot()
     else
-        print("🎯 AimBot ВЫКЛЮЧЕН")
-        
-        -- СКРЫТЬ FOV КРУГ
-        if fovCircle then
-            fovCircle.Visible = false
-        end
-        
-        -- ОСТАНОВИТЬ ЦИКЛ
-        if aimbotConnection then
-            aimbotConnection:Disconnect()
-            aimbotConnection = nil
-        end
+        enableAimbot()
     end
 end
 
 -- ИЗМЕНИТЬ FOV
 local function changeFOV()
-    if aimbotFOV < 150 then
-        aimbotFOV = aimbotFOV + 25
+    if aimbotFOV < 200 then
+        aimbotFOV = aimbotFOV + 50
     else
         aimbotFOV = 50
     end
@@ -529,101 +525,48 @@ local function changeFOV()
         fovCircle.Radius = aimbotFOV
     end
     
-    print("🎯 FOV: " .. aimbotFOV)
+    print("FOV: " .. aimbotFOV)
 end
 
 -- ============================================
--- МОБИЛЬНОЕ УПРАВЛЕНИЕ
+-- МЕНЮ
 -- ============================================
 
-local lastTapTime = 0
-UserInputService.TouchTap:Connect(function(touchPos, gameProcessed)
-    if gameProcessed then return end
-    
-    local currentTime = tick()
-    
-    -- ДВОЙНОЙ ТАП: ВКЛ/ВЫКЛ AIMBOT
-    if currentTime - lastTapTime < 0.3 then
-        toggleAimbot()
-    end
-    
-    lastTapTime = currentTime
-end)
-
--- ДОЛГОЕ НАЖАТИЕ: ИЗМЕНИТЬ FOV
-local touchStartTime = 0
-UserInputService.TouchStarted:Connect(function()
-    touchStartTime = tick()
-end)
-
-UserInputService.TouchEnded:Connect(function()
-    local touchDuration = tick() - touchStartTime
-    if touchDuration > 0.7 then
-        changeFOV()
-    end
-end)
-
--- ============================================
--- ПРОСТОЕ МЕНЮ
--- ============================================
 local function createMenu()
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "AimMenu"
     screenGui.Parent = CoreGui
-    screenGui.ResetOnSpawn = false
     
     local mainFrame = Instance.new("Frame")
-    mainFrame.Size = UDim2.new(0, 120, 0, 100)
+    mainFrame.Size = UDim2.new(0, 120, 0, 80)
     mainFrame.Position = UDim2.new(0, 20, 0, 20)
     mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
     mainFrame.BorderSizePixel = 0
     mainFrame.Parent = screenGui
     
-    local uiCorner = Instance.new("UICorner")
-    uiCorner.CornerRadius = UDim.new(0, 6)
-    uiCorner.Parent = mainFrame
-    
-    -- ЗАГОЛОВОК
-    local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, 0, 0, 25)
-    title.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-    title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    title.Text = "AIMBOT"
-    title.Font = Enum.Font.GothamBold
-    title.TextSize = 12
-    title.Parent = mainFrame
-    
     -- КНОПКА AIMBOT
     local aimBtn = Instance.new("TextButton")
-    aimBtn.Size = UDim2.new(0.9, 0, 0, 25)
-    aimBtn.Position = UDim2.new(0.05, 0, 0, 30)
+    aimBtn.Size = UDim2.new(0.9, 0, 0, 30)
+    aimBtn.Position = UDim2.new(0.05, 0, 0, 10)
     aimBtn.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
     aimBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     aimBtn.Text = "AIM: OFF"
     aimBtn.Font = Enum.Font.Gotham
-    aimBtn.TextSize = 11
+    aimBtn.TextSize = 12
     aimBtn.Parent = mainFrame
-    
-    local aimCorner = Instance.new("UICorner")
-    aimCorner.CornerRadius = UDim.new(0, 4)
-    aimCorner.Parent = aimBtn
     
     -- КНОПКА FOV
     local fovBtn = Instance.new("TextButton")
-    fovBtn.Size = UDim2.new(0.9, 0, 0, 25)
-    fovBtn.Position = UDim2.new(0.05, 0, 0, 60)
+    fovBtn.Size = UDim2.new(0.9, 0, 0, 30)
+    fovBtn.Position = UDim2.new(0.05, 0, 0, 45)
     fovBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 200)
     fovBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     fovBtn.Text = "FOV: " .. aimbotFOV
     fovBtn.Font = Enum.Font.Gotham
-    fovBtn.TextSize = 11
+    fovBtn.TextSize = 12
     fovBtn.Parent = mainFrame
     
-    local fovCorner = Instance.new("UICorner")
-    fovCorner.CornerRadius = UDim.new(0, 4)
-    fovCorner.Parent = fovBtn
-    
-    -- ОБРАБОТЧИКИ КНОПОК
+    -- ОБРАБОТЧИКИ
     aimBtn.MouseButton1Click:Connect(function()
         toggleAimbot()
         if aimbotEnabled then
@@ -644,7 +587,7 @@ local function createMenu()
     local dragging = false
     local dragStart, frameStart
     
-    title.InputBegan:Connect(function(input)
+    mainFrame.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             dragStart = input.Position
@@ -675,27 +618,23 @@ end
 if fovCircle then
     RunService.RenderStepped:Connect(function()
         fovCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-        fovCircle.Visible = aimbotEnabled
     end)
 end
 
 -- ============================================
--- ЗАПУСК СИСТЕМЫ
+-- АВТОМАТИЧЕСКИЙ ЗАПУСК
 -- ============================================
 
-wait(1) -- ЖДЕМ ЗАГРУЗКИ ESP
+wait(1) -- ЖДЕМ ЗАГРУЗКИ
 
 -- СОЗДАЕМ МЕНЮ
 createMenu()
 
+-- АВТОМАТИЧЕСКИ ВКЛЮЧАЕМ AIMBOT
+wait(2)
+enableAimbot()
+
 print("======================================")
-print("✅ ESP система загружена")
-print("✅ AimBot система загружена")
-print("======================================")
-print("🎯 AimBot целится в ТЕ ЖЕ куклы что и ESP")
-print("🎯 PlayerReg игроков: " .. tostring(#PlayerReg))
-print("🎯 Управление:")
-print("   - Двойной тап: вкл/выкл AimBot")
-print("   - Долгое нажатие: изменить FOV")
-print("   - Меню: кнопки управления")
+print("ESP ЗАГРУЖЕН")
+print("AIMBOT АВТОМАТИЧЕСКИ ВКЛЮЧЕН")
 print("======================================")
